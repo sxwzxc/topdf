@@ -1,7 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import Cropper, { Area } from "react-easy-crop"
+import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop"
+import "react-image-crop/dist/ReactCrop.css"
 import { Button } from "@/components/ui/button"
 import {
   RotateCw,
@@ -22,8 +23,8 @@ interface ImageEditorProps {
 
 type Mode = "crop" | "correct"
 
-const ASPECTS: { label: string; value: number | null }[] = [
-  { label: "自由", value: null },
+const ASPECTS: { label: string; value: number | undefined }[] = [
+  { label: "自由", value: undefined },
   { label: "1:1", value: 1 },
   { label: "4:3", value: 4 / 3 },
   { label: "3:4", value: 3 / 4 },
@@ -38,30 +39,57 @@ export default function ImageEditor({
   onCancel,
 }: ImageEditorProps) {
   const [mode, setMode] = useState<Mode>("crop")
-
-  // crop mode state
-  const [crop, setCrop] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
-  const [rotation, setRotation] = useState(0)
-  const [aspect, setAspect] = useState<number | null>(null)
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
-
   const [applying, setApplying] = useState(false)
 
-  const onCropComplete = useCallback((_area: Area, areaPixels: Area) => {
-    setCroppedAreaPixels(areaPixels)
-  }, [])
+  // crop mode state
+  const [rotation, setRotation] = useState(0)
+  const [rotatedSrc, setRotatedSrc] = useState(imageSrc)
+  const [crop, setCrop] = useState<Crop>()
+  const [completedCrop, setCompletedCrop] = useState<PixelCrop>()
+  const [aspect, setAspect] = useState<number | undefined>(undefined)
+  const imgRef = useRef<HTMLImageElement>(null)
 
   const rotateBy = (deg: number) => {
     setRotation((prev) => (prev + deg + 360) % 360)
   }
 
+  // 重新生成旋转后的图片（带防抖，避免拖动滑块时频繁计算）
+  useEffect(() => {
+    let cancelled = false
+    const t = setTimeout(async () => {
+      if (rotation === 0) {
+        if (!cancelled) setRotatedSrc(imageSrc)
+        return
+      }
+      try {
+        const url = await rotateImage(imageSrc, rotation)
+        if (!cancelled) setRotatedSrc(url)
+      } catch (err) {
+        console.error("旋转失败", err)
+      }
+    }, 180)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [rotation, imageSrc])
+
+  // 旋转或比例变化时重置裁剪框为居中 80%
+  useEffect(() => {
+    setCrop({ unit: "%", x: 10, y: 10, width: 80, height: 80 })
+    setCompletedCrop(undefined)
+  }, [rotatedSrc, aspect])
+
+  const onImageLoad = useCallback(() => {
+    // 图片载入后无需额外处理，裁剪框由 effect 设置
+  }, [])
+
   const handleApply = async () => {
     if (mode === "crop") {
-      if (!croppedAreaPixels) return
+      if (!completedCrop || !imgRef.current) return
       setApplying(true)
       try {
-        const blob = await getCroppedBlob(imageSrc, croppedAreaPixels, rotation)
+        const blob = await getCroppedBlob(imgRef.current, completedCrop)
         const baseName = fileName.replace(/\.[^.]+$/, "")
         onApply(blob, `${baseName}-edited.png`)
       } catch (err) {
@@ -69,7 +97,6 @@ export default function ImageEditor({
         setApplying(false)
       }
     } else {
-      // correct mode handled by sub-component via ref callback
       correctApplyRef.current?.()
     }
   }
@@ -86,21 +113,21 @@ export default function ImageEditor({
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applying, mode, croppedAreaPixels, rotation])
+  }, [applying, mode, completedCrop])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in-up">
-      <div className="editor-panel w-full max-w-3xl rounded-xl border border-[#3776AB]/30 bg-[#0a0a0a] shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in-up">
+      <div className="editor-panel w-full max-w-3xl rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#3776AB]/15">
-          <div className="flex items-center gap-2 text-sm text-gray-300 min-w-0">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+          <div className="flex items-center gap-2 text-sm text-slate-700 min-w-0">
             <CropIcon className="w-4 h-4 text-[#3776AB] shrink-0" />
-            <span>编辑图片</span>
-            <span className="text-xs text-gray-600 font-mono truncate">· {fileName}</span>
+            <span className="font-medium">编辑图片</span>
+            <span className="text-xs text-slate-400 font-mono truncate">· {fileName}</span>
           </div>
           <button
             onClick={onCancel}
-            className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors cursor-pointer shrink-0"
+            className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
             aria-label="关闭"
           >
             <X className="w-4 h-4" />
@@ -108,13 +135,13 @@ export default function ImageEditor({
         </div>
 
         {/* Mode tabs */}
-        <div className="flex border-b border-[#3776AB]/15">
+        <div className="flex border-b border-slate-200">
           <button
             onClick={() => setMode("crop")}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
               mode === "crop"
                 ? "text-[#3776AB] border-b-2 border-[#3776AB] bg-[#3776AB]/5"
-                : "text-gray-500 hover:text-gray-300"
+                : "text-slate-500 hover:text-slate-700"
             }`}
           >
             <CropIcon className="w-3.5 h-3.5" />
@@ -125,7 +152,7 @@ export default function ImageEditor({
             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
               mode === "correct"
                 ? "text-[#3776AB] border-b-2 border-[#3776AB] bg-[#3776AB]/5"
-                : "text-gray-500 hover:text-gray-300"
+                : "text-slate-500 hover:text-slate-700"
             }`}
           >
             <Scan className="w-3.5 h-3.5" />
@@ -136,25 +163,31 @@ export default function ImageEditor({
         {/* Body */}
         {mode === "crop" ? (
           <>
-            <div className="relative w-full h-[50vh] min-h-[300px] bg-[#0d1117]">
-              <Cropper
-                image={imageSrc}
+            <div className="relative w-full h-[50vh] min-h-[300px] bg-slate-100 flex items-center justify-center overflow-hidden">
+              <ReactCrop
                 crop={crop}
-                zoom={zoom}
-                rotation={rotation}
-                aspect={aspect ?? undefined}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
-                onRotationChange={setRotation}
-                onCropComplete={onCropComplete}
-                restrictPosition={false}
-              />
+                onChange={(_, percentCrop) => setCrop(percentCrop)}
+                onComplete={(c) => setCompletedCrop(c)}
+                aspect={aspect}
+                keepSelection
+                minWidth={20}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  ref={imgRef}
+                  src={rotatedSrc}
+                  onLoad={onImageLoad}
+                  alt="待裁剪"
+                  style={{ maxHeight: "50vh", maxWidth: "100%", display: "block" }}
+                  draggable={false}
+                />
+              </ReactCrop>
             </div>
 
-            <div className="px-4 py-3 space-y-3 border-t border-[#3776AB]/15">
+            <div className="px-4 py-3 space-y-3 border-t border-slate-200">
               {/* Aspect ratio */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-gray-500 w-12">比例</span>
+                <span className="text-xs text-slate-500 w-12">比例</span>
                 {ASPECTS.map((a) => (
                   <button
                     key={a.label}
@@ -168,7 +201,7 @@ export default function ImageEditor({
 
               {/* Rotation */}
               <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 w-12">旋转</span>
+                <span className="text-xs text-slate-500 w-12">旋转</span>
                 <button
                   onClick={() => rotateBy(-90)}
                   className="editor-icon-btn"
@@ -197,33 +230,20 @@ export default function ImageEditor({
                   }}
                   className="editor-range flex-1"
                 />
-                <span className="text-xs text-gray-400 font-mono w-12 text-right">
+                <span className="text-xs text-slate-600 font-mono w-12 text-right">
                   {(rotation > 180 ? rotation - 360 : rotation).toFixed(1)}°
                 </span>
               </div>
 
-              {/* Zoom */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500 w-12">缩放</span>
-                <input
-                  type="range"
-                  min={1}
-                  max={5}
-                  step={0.05}
-                  value={zoom}
-                  onChange={(e) => setZoom(Number(e.target.value))}
-                  className="editor-range flex-1"
-                />
-                <span className="text-xs text-gray-400 font-mono w-12 text-right">
-                  {zoom.toFixed(2)}x
-                </span>
-              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                拖动框线或四角调整裁剪区域，拖动框内移动位置。
+              </p>
 
               <ActionBar
                 onCancel={onCancel}
                 onApply={handleApply}
                 applying={applying}
-                applyDisabled={!croppedAreaPixels}
+                applyDisabled={!completedCrop}
               />
             </div>
           </>
@@ -348,7 +368,7 @@ function CorrectPanel({
 
   return (
     <>
-      <div className="relative w-full h-[50vh] min-h-[300px] bg-[#0d1117] flex items-center justify-center overflow-hidden">
+      <div className="relative w-full h-[50vh] min-h-[300px] bg-slate-100 flex items-center justify-center overflow-hidden">
         <div className="relative inline-block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -403,8 +423,8 @@ function CorrectPanel({
         </div>
       </div>
 
-      <div className="px-4 py-3 space-y-3 border-t border-[#3776AB]/15">
-        <p className="text-xs text-gray-500 leading-relaxed">
+      <div className="px-4 py-3 space-y-3 border-t border-slate-200">
+        <p className="text-xs text-slate-500 leading-relaxed">
           拖动四个角点框选目标区域（如文档、白板、屏幕），应用后将自动透视矫正为正面视图。
         </p>
         <div className="flex justify-end items-center gap-2 pt-1">
@@ -418,13 +438,12 @@ function CorrectPanel({
             <span className="ml-1.5 text-xs">重置</span>
           </button>
           <div className="flex-1" />
-          <Button
-            variant="outline"
+          <button
             onClick={onCancel}
-            className="btn-outline rounded cursor-pointer"
+            className="px-4 h-9 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer text-sm"
           >
             取消
-          </Button>
+          </button>
           <Button
             onClick={doApply}
             disabled={applying}
@@ -463,13 +482,12 @@ function ActionBar({
 }) {
   return (
     <div className="flex justify-end gap-2 pt-1">
-      <Button
-        variant="outline"
+      <button
         onClick={onCancel}
-        className="btn-outline rounded cursor-pointer"
+        className="px-4 h-9 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer text-sm"
       >
         取消
-      </Button>
+      </button>
       <Button
         onClick={onApply}
         disabled={applying || applyDisabled}
@@ -512,46 +530,59 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * 裁剪 + 旋转 输出 PNG blob
+ * 旋转图片任意角度，返回 data URL（画布按旋转后包围盒尺寸）。
  */
-async function getCroppedBlob(
-  imageSrc: string,
-  pixelCrop: Area,
-  rotation: number
-): Promise<Blob> {
-  const image = await loadImage(imageSrc)
+async function rotateImage(src: string, rotation: number): Promise<string> {
+  const image = await loadImage(src)
   const canvas = document.createElement("canvas")
   const ctx = canvas.getContext("2d")
   if (!ctx) throw new Error("Canvas 2D context unavailable")
 
-  const rotRad = (rotation * Math.PI) / 180
+  const rad = (rotation * Math.PI) / 180
   const bBoxWidth =
-    Math.abs(image.width * Math.cos(rotRad)) +
-    Math.abs(image.height * Math.sin(rotRad))
+    Math.abs(image.width * Math.cos(rad)) +
+    Math.abs(image.height * Math.sin(rad))
   const bBoxHeight =
-    Math.abs(image.width * Math.sin(rotRad)) +
-    Math.abs(image.height * Math.cos(rotRad))
+    Math.abs(image.width * Math.sin(rad)) +
+    Math.abs(image.height * Math.cos(rad))
 
   canvas.width = Math.round(bBoxWidth)
   canvas.height = Math.round(bBoxHeight)
   ctx.translate(canvas.width / 2, canvas.height / 2)
-  ctx.rotate(rotRad)
+  ctx.rotate(rad)
   ctx.translate(-image.width / 2, -image.height / 2)
   ctx.drawImage(image, 0, 0)
 
-  const out = document.createElement("canvas")
-  const outCtx = out.getContext("2d")
-  if (!outCtx) throw new Error("Canvas 2D context unavailable")
-  const w = Math.max(1, Math.round(pixelCrop.width))
-  const h = Math.max(1, Math.round(pixelCrop.height))
-  out.width = w
-  out.height = h
-  outCtx.drawImage(
-    canvas,
-    pixelCrop.x,
-    pixelCrop.y,
-    pixelCrop.width,
-    pixelCrop.height,
+  return canvas.toDataURL("image/png")
+}
+
+/**
+ * 根据 react-image-crop 的像素裁剪区域，从已渲染的 img 上裁剪输出 PNG blob。
+ * completedCrop 为相对显示尺寸的像素坐标，需缩放到原始分辨率。
+ */
+async function getCroppedBlob(
+  image: HTMLImageElement,
+  crop: PixelCrop
+): Promise<Blob> {
+  const scaleX = image.naturalWidth / image.width
+  const scaleY = image.naturalHeight / image.height
+
+  const canvas = document.createElement("canvas")
+  const ctx = canvas.getContext("2d")
+  if (!ctx) throw new Error("Canvas 2D context unavailable")
+
+  const w = Math.max(1, Math.round(crop.width * scaleX))
+  const h = Math.max(1, Math.round(crop.height * scaleY))
+  canvas.width = w
+  canvas.height = h
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = "high"
+  ctx.drawImage(
+    image,
+    crop.x * scaleX,
+    crop.y * scaleY,
+    crop.width * scaleX,
+    crop.height * scaleY,
     0,
     0,
     w,
@@ -559,7 +590,7 @@ async function getCroppedBlob(
   )
 
   return new Promise<Blob>((resolve, reject) => {
-    out.toBlob(
+    canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("toBlob returned null"))),
       "image/png"
     )
