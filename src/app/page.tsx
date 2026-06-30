@@ -3,7 +3,7 @@
 import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Play, ExternalLink, Zap, ChevronDown, ChevronUp, FolderTree, Route, Layers, Upload, FileImage, Download, Loader2, X } from "lucide-react"
+import { Play, ExternalLink, Zap, ChevronDown, ChevronUp, FolderTree, Route, Layers, Upload, FileImage, Download, Loader2, X, ArrowUp, ArrowDown, ImagePlus } from "lucide-react"
 
 interface ApiEndpoint {
   name: string
@@ -72,9 +72,8 @@ export default function Home() {
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
   const [expandedCode, setExpandedCode] = useState<string | null>(null)
 
-  // Image-to-PDF converter state
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  // Image-to-PDF converter state (multi-image)
+  const [images, setImages] = useState<{ id: string; file: File; url: string }[]>([])
   const [converting, setConverting] = useState(false)
   const [convertError, setConvertError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -89,45 +88,81 @@ export default function Home() {
     setLoadingStates(prev => ({ ...prev, [key]: false }))
   }
 
-  const selectFile = (file: File | null) => {
+  const addFiles = (fileList: FileList | null) => {
     setConvertError(null)
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-    }
-    if (!file) {
-      setSelectedFile(null)
-      setPreviewUrl(null)
+    if (!fileList || fileList.length === 0) return
+    const newItems = Array.from(fileList)
+      .filter(f => f.type.startsWith("image/"))
+      .map(file => ({
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        url: URL.createObjectURL(file),
+      }))
+    if (newItems.length === 0) {
+      setConvertError("Please select image files only.")
       return
     }
-    if (!file.type.startsWith("image/")) {
-      setConvertError("Please select an image file.")
-      setSelectedFile(null)
-      setPreviewUrl(null)
-      return
-    }
-    setSelectedFile(file)
-    setPreviewUrl(URL.createObjectURL(file))
+    setImages(prev => [...prev, ...newItems])
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    selectFile(e.target.files?.[0] ?? null)
+    addFiles(e.target.files)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    selectFile(e.dataTransfer.files?.[0] ?? null)
+    addFiles(e.dataTransfer.files)
+  }
+
+  const removeImage = (id: string) => {
+    setImages(prev => {
+      const target = prev.find(i => i.id === id)
+      if (target) URL.revokeObjectURL(target.url)
+      return prev.filter(i => i.id !== id)
+    })
+  }
+
+  const moveImage = (index: number, direction: -1 | 1) => {
+    const newIndex = index + direction
+    setImages(prev => {
+      if (index < 0 || index >= prev.length || newIndex < 0 || newIndex >= prev.length) {
+        return prev
+      }
+      const next = [...prev]
+      const [moved] = next.splice(index, 1)
+      next.splice(newIndex, 0, moved)
+      return next
+    })
+  }
+
+  const clearAll = () => {
+    setImages(prev => {
+      prev.forEach(i => URL.revokeObjectURL(i.url))
+      return []
+    })
+    setConvertError(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const handleConvert = async () => {
-    if (!selectedFile) return
+    if (images.length === 0) return
     setConverting(true)
     setConvertError(null)
     try {
+      const formData = new FormData()
+      images.forEach((img, idx) => {
+        formData.append(`image-${idx}`, img.file, img.file.name)
+      })
+
       const response = await fetch("/api/img2pdf", {
         method: "POST",
-        headers: { "Content-Type": selectedFile.type || "image/*" },
-        body: selectedFile,
+        body: formData,
       })
       if (!response.ok) {
         let message = `Conversion failed (HTTP ${response.status})`
@@ -143,7 +178,7 @@ export default function Home() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = "converted.pdf"
+      a.download = images.length > 1 ? "merged.pdf" : "converted.pdf"
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -152,13 +187,6 @@ export default function Home() {
       setConvertError(err instanceof Error ? err.message : "Conversion failed.")
     } finally {
       setConverting(false)
-    }
-  }
-
-  const clearSelection = () => {
-    selectFile(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
     }
   }
 
@@ -243,7 +271,7 @@ export default function Home() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2 text-gray-400">
                 <FileImage className="w-4 h-4 text-[#3776AB]" />
-                Image → PDF Converter
+                Images → PDF Converter (Merge Multiple)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -251,54 +279,114 @@ export default function Home() {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 onChange={handleFileChange}
                 className="hidden"
               />
 
-              {!previewUrl ? (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    setIsDragging(true)
-                  }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={handleDrop}
-                  className={`dropzone flex flex-col items-center justify-center gap-3 py-12 px-6 rounded-lg cursor-pointer transition-colors ${
-                    isDragging ? "dropzone-active" : ""
-                  }`}
-                >
-                  <div className="w-12 h-12 rounded-full bg-[#3776AB]/15 flex items-center justify-center">
-                    <Upload className="w-6 h-6 text-[#3776AB]" />
-                  </div>
-                  <p className="text-sm text-gray-300">
-                    Click to upload or drag &amp; drop an image
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    PNG, JPG, WEBP, GIF, BMP, etc.
-                  </p>
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  setIsDragging(true)
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                className={`dropzone flex flex-col items-center justify-center gap-3 py-8 px-6 rounded-lg cursor-pointer transition-colors ${
+                  isDragging ? "dropzone-active" : ""
+                }`}
+              >
+                <div className="w-12 h-12 rounded-full bg-[#3776AB]/15 flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-[#3776AB]" />
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="relative rounded-lg overflow-hidden bg-[#0d1117] border border-[#3776AB]/15 flex items-center justify-center max-h-80">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={previewUrl}
-                      alt="Selected preview"
-                      className="max-h-80 w-auto object-contain"
-                    />
+                <p className="text-sm text-gray-300">
+                  Click to upload or drag &amp; drop images
+                </p>
+                <p className="text-xs text-gray-500">
+                  PNG, JPG, WEBP, GIF, BMP, etc. — multiple images are merged into one PDF
+                </p>
+              </div>
+
+              {images.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-400 font-mono">
+                      {images.length} image{images.length > 1 ? "s" : ""} selected
+                    </p>
                     <button
-                      onClick={clearSelection}
-                      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
-                      aria-label="Remove image"
+                      onClick={clearAll}
+                      className="text-xs text-gray-500 hover:text-red-400 transition-colors cursor-pointer"
                     >
-                      <X className="w-4 h-4" />
+                      Clear all
                     </button>
                   </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="text-xs text-gray-400 font-mono truncate">
-                      {selectedFile?.name} · {(selectedFile ? selectedFile.size / 1024 : 0).toFixed(1)} KB
-                    </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-80 overflow-y-auto pr-1">
+                    {images.map((img, idx) => (
+                      <div
+                        key={img.id}
+                        className="relative rounded-lg overflow-hidden bg-[#0d1117] border border-[#3776AB]/15 aspect-square group"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.url}
+                          alt={`Image ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center text-[10px] text-white font-mono">
+                          {idx + 1}
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            removeImage(img.id)
+                          }}
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 hover:bg-red-500/80 flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
+                          aria-label="Remove image"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              moveImage(idx, -1)
+                            }}
+                            disabled={idx === 0}
+                            className="w-5 h-5 rounded-full bg-black/70 hover:bg-[#3776AB]/80 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
+                            aria-label="Move up"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              moveImage(idx, 1)
+                            }}
+                            disabled={idx === images.length - 1}
+                            className="w-5 h-5 rounded-full bg-black/70 hover:bg-[#3776AB]/80 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
+                            aria-label="Move down"
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="aspect-square rounded-lg border border-dashed border-[#3776AB]/25 hover:border-[#3776AB]/50 hover:bg-[#3776AB]/5 flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-[#3776AB] transition-colors cursor-pointer"
+                      aria-label="Add more images"
+                    >
+                      <ImagePlus className="w-5 h-5" />
+                      <span className="text-xs">Add more</span>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                    <p className="text-xs text-gray-500">
+                      Drag-hover reorder coming soon — use arrows to change page order.
+                    </p>
                     <Button
                       onClick={handleConvert}
                       disabled={converting}
@@ -312,7 +400,7 @@ export default function Home() {
                       ) : (
                         <>
                           <Download className="w-4 h-4 mr-2" />
-                          Convert to PDF
+                          {images.length > 1 ? "Merge to PDF" : "Convert to PDF"}
                         </>
                       )}
                     </Button>
