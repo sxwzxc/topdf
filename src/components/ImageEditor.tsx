@@ -1073,12 +1073,93 @@ async function warpQuadrilateral(
 
   outCtx.putImageData(outData, 0, 0)
 
+  // 自动裁剪：去除四周白边，输出精确匹配选区的内容
+  const cropBox = findContentBounds(outCtx, outW, outH)
+  if (cropBox) {
+    // 保留 2px 安全边距
+    const pad = 2
+    const cx = Math.max(0, cropBox.x - pad)
+    const cy = Math.max(0, cropBox.y - pad)
+    const cw = Math.min(outW - cx, cropBox.w + pad * 2)
+    const ch = Math.min(outH - cy, cropBox.h + pad * 2)
+
+    const cropped = document.createElement("canvas")
+    cropped.width = cw
+    cropped.height = ch
+    const cropCtx = cropped.getContext("2d")!
+    cropCtx.drawImage(out, cx, cy, cw, ch, 0, 0, cw, ch)
+
+    return new Promise<Blob>((resolve, reject) => {
+      cropped.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
+        "image/png"
+      )
+    })
+  }
+
   return new Promise<Blob>((resolve, reject) => {
     out.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
       "image/png"
     )
   })
+}
+
+/** 从四边向中心扫描，找到非白色像素的边界框 */
+function findContentBounds(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number
+): { x: number; y: number; w: number; h: number } | null {
+  const data = ctx.getImageData(0, 0, w, h).data
+
+  // 白色阈值：RGB 各通道 > 250 视为白色
+  const isWhite = (idx: number) =>
+    data[idx] > 250 && data[idx + 1] > 250 && data[idx + 2] > 250
+
+  // 上边界
+  let top = 0
+  for (; top < h; top++) {
+    let hasContent = false
+    for (let x = 0; x < w; x++) {
+      if (!isWhite((top * w + x) * 4)) { hasContent = true; break }
+    }
+    if (hasContent) break
+  }
+
+  // 下边界
+  let bottom = h - 1
+  for (; bottom > top; bottom--) {
+    let hasContent = false
+    for (let x = 0; x < w; x++) {
+      if (!isWhite((bottom * w + x) * 4)) { hasContent = true; break }
+    }
+    if (hasContent) break
+  }
+
+  // 左边界
+  let left = 0
+  for (; left < w; left++) {
+    let hasContent = false
+    for (let y = top; y <= bottom; y++) {
+      if (!isWhite((y * w + left) * 4)) { hasContent = true; break }
+    }
+    if (hasContent) break
+  }
+
+  // 右边界
+  let right = w - 1
+  for (; right > left; right--) {
+    let hasContent = false
+    for (let y = top; y <= bottom; y++) {
+      if (!isWhite((y * w + right) * 4)) { hasContent = true; break }
+    }
+    if (hasContent) break
+  }
+
+  if (left > right || top > bottom) return null
+
+  return { x: left, y: top, w: right - left + 1, h: bottom - top + 1 }
 }
 
 /* ---------------- Homography — DLT + 高斯消元 ---------------- */
