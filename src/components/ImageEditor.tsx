@@ -990,10 +990,12 @@ async function getCroppedBlob(
 }
 
 /**
- * 四点透视矫正：通过直接求解 Homography 透视矩阵，
- * 逐像素反向映射 + 双线性插值，输出正面矩形。
+ * 四点透视矫正。
  *
- * @param imgSize 原图的自然宽高（用于裁剪映射结果）
+ * 流程：DLT 求解 H(src→dst) → 3×3 求逆得 Hinv(dst→src)
+ * → 逐像素反向映射 + 双线性插值。
+ *
+ * 参考 OpenCV getPerspectiveTransform + warpPerspective。
  */
 async function warpQuadrilateral(
   imageSrc: string,
@@ -1002,22 +1004,22 @@ async function warpQuadrilateral(
   const image = await loadImage(imageSrc)
   const [TL, TR, BR, BL] = srcPts
 
-  // 输出矩形尺寸：取对边平均长度
-  const outW = Math.max(1, Math.round((dist(TL, TR) + dist(BL, BR)) / 2))
-  const outH = Math.max(1, Math.round((dist(TL, BL) + dist(TR, BR)) / 2))
+  // 输出尺寸 — 取对边 max 保留完整区域
+  const outW = Math.max(2, Math.round(Math.max(dist(TL, TR), dist(BL, BR))))
+  const outH = Math.max(2, Math.round(Math.max(dist(TL, BL), dist(TR, BR))))
 
-  // 目标：把源四点映射到目标矩形的四角
-  const dst: [Pt, Pt, Pt, Pt] = [
+  // H: src → dst (3×3 行主序，h33=1)
+  const H = computeHomographyDirect(srcPts, [
     { x: 0, y: 0 },
     { x: outW - 1, y: 0 },
     { x: outW - 1, y: outH - 1 },
     { x: 0, y: outH - 1 },
-  ]
+  ])
 
-  // H: src → dst 的 3×3 矩阵，行主序 [h11,h12,h13, h21,h22,h23, h31,h32,h33=1]
-  const H = computeHomographyDirect(srcPts, dst)
+  // Hinv: dst → src（反向映射用）
+  const Hinv = invert3x3(H)
 
-  // 在屏幕外 canvas 上绘制原图，获取像素数据
+  // 源图 → 像素缓冲区
   const srcCanvas = document.createElement("canvas")
   srcCanvas.width = image.naturalWidth
   srcCanvas.height = image.naturalHeight
@@ -1025,57 +1027,27 @@ async function warpQuadrilateral(
   srcCtx.drawImage(image, 0, 0)
   const srcData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height)
 
-  // 输出 canvas
+  // 输出 canvas — 预填白色
   const out = document.createElement("canvas")
   out.width = outW
   out.height = outH
   const outCtx = out.getContext("2d")!
-
-  // 白色背景
   outCtx.fillStyle = "#ffffff"
   outCtx.fillRect(0, 0, outW, outH)
   const outData = outCtx.getImageData(0, 0, outW, outH)
-  const outPixels = outData.data
 
   const sw = srcData.width
   const sh = srcData.height
-  const srcPixels = srcData.data
+  const src = srcData.data
+  const dst = outData.data
 
-  // 逐像素反向映射：dst 坐标 (u,v) → 经 H 映射到 src 坐标 (sx,sy)
+  // Hinv · [u, v, 1]ᵀ → 反向映射
   for (let v = 0; v < outH; v++) {
     for (let u = 0; u < outW; u++) {
-      // 齐次变换: [sx', sy', w'] = H · [u, v, 1]  (H: dst→src 是反方向)
-      // 但我们计算的是 H: src→dst，所以这里用正向映射的反解:
-      // 已知 dst(u,v)，求对应的 src(x,y)
-      // 公式来自: H 将 (x,y) 映射到 (u',v',w') where u=u'/w', v=v'/w'
-      // 但我们有 u,v 和 H，需要反解 (x,y)
-      // 
-      // 设 [x,y,1] 经 H 得 [u', v', w']: u'=h11·x+h12·y+h13, v'=h21·x+h22·y+h23, w'=h31·x+h32·y+1
-      // u = u'/w', v = v'/w'
-      //
-      // 反向求解: 对于给定的 (u,v)，求对应的 (x,y)
-      // 整理得线性方程组:
-      // (h11 - h31·u)·x + (h12 - h32·u)·y = u - h13
-      // (h21 - h31·v)·x + (h22 - h32·v)·y = v - h23
-      //
-      // 用 Cramer 法则求解 2×2 系统
+      const w = Hinv[6] * u + Hinv[7] * v + Hinv[8]
+      const sx = (Hinv[0] * u + Hinv[1] * v + Hinv[2]) / w
+      const sy = (Hinv[3] * u + Hinv[4] * v + Hinv[5]) / w
 
-      const a = H[0] - H[6] * u
-      const b = H[1] - H[7] * u
-      const c = H[3] - H[6] * v
-      const d = H[4] - H[7] * v
-      const e = u - H[2]
-      const f = v - H[5]
-
-      const det = a * d - b * c
-      if (Math.abs(det) < 1e-10) continue
-
-      const sx = (e * d - b * f) / det
-      const sy = (a * f - e * c) / det
-
-      const di = (v * outW + u) * 4
-
-      // 边界检查
       if (sx < 0 || sx >= sw - 1 || sy < 0 || sy >= sh - 1) continue
 
       // 双线性插值
@@ -1084,21 +1056,18 @@ async function warpQuadrilateral(
       const dx = sx - fx
       const dy = sy - fy
 
+      const di = (v * outW + u) * 4
       const i00 = (fy * sw + fx) * 4
       const i10 = (fy * sw + Math.min(fx + 1, sw - 1)) * 4
       const i01 = (Math.min(fy + 1, sh - 1) * sw + fx) * 4
       const i11 = (Math.min(fy + 1, sh - 1) * sw + Math.min(fx + 1, sw - 1)) * 4
 
-      for (let ch = 0; ch < 3; ch++) {
-        const v00 = srcPixels[i00 + ch]
-        const v10 = srcPixels[i10 + ch]
-        const v01 = srcPixels[i01 + ch]
-        const v11 = srcPixels[i11 + ch]
-        const top = v00 + (v10 - v00) * dx
-        const bot = v01 + (v11 - v01) * dx
-        outPixels[di + ch] = Math.round(top + (bot - top) * dy)
+      for (let c = 0; c < 3; c++) {
+        const t = src[i00 + c] + (src[i10 + c] - src[i00 + c]) * dx
+        const b = src[i01 + c] + (src[i11 + c] - src[i01 + c]) * dx
+        dst[di + c] = Math.round(t + (b - t) * dy)
       }
-      outPixels[di + 3] = 255
+      dst[di + 3] = 255
     }
   }
 
@@ -1106,67 +1075,83 @@ async function warpQuadrilateral(
 
   return new Promise<Blob>((resolve, reject) => {
     out.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("toBlob returned null"))),
+      (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
       "image/png"
     )
   })
 }
 
-/* ---------------- Homography — 直接求解（高斯消元 8×8） ---------------- */
+/* ---------------- Homography — DLT + 高斯消元 ---------------- */
 
 /**
- * 直接求解 4 对点的透视变换矩阵 H（3×3，h33 归一化为 1）。
- * H 将 src → dst，即 dst = H · src（齐次坐标）。
- * 返回行主序 9 个元素 [h11, h12, h13, h21, h22, h23, h31, h32, 1]。
+ * DLT 求解 4 对点的 Homography 矩阵 H（3×3）。
+ * H 将 src → dst。
+ * 返回行主序 [h11,h12,h13, h21,h22,h23, h31,h32, 1]（与 marrotte/projective 一致）。
  */
 function computeHomographyDirect(
   src: [Pt, Pt, Pt, Pt],
   dst: [Pt, Pt, Pt, Pt]
 ): number[] {
-  // 8×8 增广矩阵 [A | b]，求解 A·h = b
+  // 8×9 增广矩阵
   const M: number[][] = []
   for (let i = 0; i < 4; i++) {
     const x = src[i].x
     const y = src[i].y
     const u = dst[i].x
     const v = dst[i].y
-    // 行 2i:   [-x, -y, -1, 0, 0, 0, x*u, y*u  |  -u]
-    M.push([-x, -y, -1, 0, 0, 0, x * u, y * u, -u])
-    // 行 2i+1: [0, 0, 0, -x, -y, -1, x*v, y*v  |  -v]
-    M.push([0, 0, 0, -x, -y, -1, x * v, y * v, -v])
+    // 对应: h11*x + h12*y + h13 - h31*x*u - h32*y*u = u
+    // 整理: [x, y, 1, 0, 0, 0, -x*u, -y*u | u]
+    M.push([x, y, 1, 0, 0, 0, -x * u, -y * u, u])
+    M.push([0, 0, 0, x, y, 1, -x * v, -y * v, v])
   }
 
-  // 高斯消元 + 回代
+  return gaussSolve(M)
+}
+
+/** 高斯消元求解 8×8 增广矩阵，返回 8 元解 */
+function gaussSolve(M: number[][]): number[] {
   const n = 8
-  for (let col = 0; col < n; col++) {
-    // 选主元
-    let pivot = col
-    for (let row = col + 1; row < n; row++) {
-      if (Math.abs(M[row][col]) > Math.abs(M[pivot][col])) pivot = row
+  // 前向消元 + 列主元
+  for (let c = 0; c < n; c++) {
+    let pivot = c
+    for (let r = c + 1; r < n; r++) {
+      if (Math.abs(M[r][c]) > Math.abs(M[pivot][c])) pivot = r
     }
-    if (Math.abs(M[pivot][col]) < 1e-15) continue
-    ;[M[col], M[pivot]] = [M[pivot], M[col]]
-
-    // 消去下方
-    for (let row = col + 1; row < n; row++) {
-      const factor = M[row][col] / M[col][col]
-      for (let j = col; j <= n; j++) {
-        M[row][j] -= factor * M[col][j]
-      }
+    if (Math.abs(M[pivot][c]) < 1e-15) continue
+    ;[M[c], M[pivot]] = [M[pivot], M[c]]
+    for (let r = c + 1; r < n; r++) {
+      const f = M[r][c] / M[c][c]
+      for (let j = c; j <= n; j++) M[r][j] -= f * M[c][j]
     }
   }
-
   // 回代
   const h = new Array(n).fill(0)
   for (let i = n - 1; i >= 0; i--) {
     let sum = M[i][n]
-    for (let j = i + 1; j < n; j++) {
-      sum -= M[i][j] * h[j]
-    }
+    for (let j = i + 1; j < n; j++) sum -= M[i][j] * h[j]
     h[i] = Math.abs(M[i][i]) > 1e-15 ? sum / M[i][i] : 0
   }
-
-  // 行主序: [h11, h12, h13, h21, h22, h23, h31, h32, 1]
   return [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], 1]
+}
+
+/** 3×3 矩阵求逆（解析法），行主序 → 行主序 */
+function invert3x3(m: number[]): number[] {
+  const det =
+    m[0] * (m[4] * m[8] - m[5] * m[7]) -
+    m[1] * (m[3] * m[8] - m[5] * m[6]) +
+    m[2] * (m[3] * m[7] - m[4] * m[6])
+  if (Math.abs(det) < 1e-15) return [1, 0, 0, 0, 1, 0, 0, 0, 1]
+  const inv = 1 / det
+  return [
+    (m[4] * m[8] - m[5] * m[7]) * inv,
+    (m[2] * m[7] - m[1] * m[8]) * inv,
+    (m[1] * m[5] - m[2] * m[4]) * inv,
+    (m[5] * m[6] - m[3] * m[8]) * inv,
+    (m[0] * m[8] - m[2] * m[6]) * inv,
+    (m[2] * m[3] - m[0] * m[5]) * inv,
+    (m[3] * m[7] - m[4] * m[6]) * inv,
+    (m[1] * m[6] - m[0] * m[7]) * inv,
+    (m[0] * m[4] - m[1] * m[3]) * inv,
+  ]
 }
 
