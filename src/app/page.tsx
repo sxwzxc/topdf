@@ -272,9 +272,6 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-flex items-center text-[10px] font-medium text-slate-300 select-none tracking-wide">
-              made by <span className="ml-0.5 text-slate-400 font-semibold">sxw</span>
-            </span>
             <a href="https://github.com/sxwzxc/topdf" target="_blank" rel="noopener noreferrer"
                className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-xl hover:bg-slate-100" aria-label="GitHub">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
