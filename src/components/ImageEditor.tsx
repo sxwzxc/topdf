@@ -693,6 +693,7 @@ function CorrectPanel({
   useEffect(() => {
     if (dragging === null) return
     const move = (e: PointerEvent) => {
+      e.preventDefault()
       const el = imgRef.current
       if (!el) return
       const rect = el.getBoundingClientRect()
@@ -705,11 +706,14 @@ function CorrectPanel({
       )
     }
     const up = () => setDragging(null)
-    window.addEventListener("pointermove", move)
+    // 用 passive: false 确保可调用 preventDefault 防止滚动
+    window.addEventListener("pointermove", move, { passive: false })
     window.addEventListener("pointerup", up)
+    window.addEventListener("pointercancel", up)
     return () => {
       window.removeEventListener("pointermove", move)
       window.removeEventListener("pointerup", up)
+      window.removeEventListener("pointercancel", up)
     }
   }, [dragging])
 
@@ -729,7 +733,7 @@ function CorrectPanel({
         x: p.x * imgSize.w,
         y: p.y * imgSize.h,
       })) as [Pt, Pt, Pt, Pt]
-      const blob = await warpQuadrilateral(imageSrc, srcPts)
+      const blob = await warpQuadrilateral(imageSrc, srcPts, imgSize)
       const baseName = fileName.replace(/\.[^.]+$/, "")
       onApply(blob, `${baseName}-corrected.png`)
     } catch (err) {
@@ -747,13 +751,17 @@ function CorrectPanel({
   const onPointerDown = (i: number) => (e: React.PointerEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     setDragging(i)
   }
 
   return (
     <>
-      <div className="relative w-full h-[50vh] min-h-[300px] bg-slate-100 flex items-center justify-center overflow-hidden">
-        <div className="relative inline-block">
+      <div
+        className="relative w-full h-[50vh] min-h-[300px] bg-slate-100 flex items-center justify-center overflow-hidden"
+        style={{ touchAction: "none" }}
+      >
+        <div className="relative inline-block" style={{ touchAction: "none" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             ref={imgRef}
@@ -797,9 +805,9 @@ function CorrectPanel({
               key={i}
               onPointerDown={onPointerDown(i)}
               style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
-              className="absolute w-5 h-5 -ml-2.5 -mt-2.5 rounded-full bg-[#3776AB] border-2 border-white cursor-grab active:cursor-grabbing touch-none shadow-lg z-10"
+              className="absolute w-7 h-7 -ml-3.5 -mt-3.5 rounded-full bg-[#3776AB] border-2 border-white cursor-grab active:cursor-grabbing touch-none shadow-lg z-10 transition-transform hover:scale-110 active:scale-125"
             >
-              <span className="absolute inset-0 flex items-center justify-center text-[8px] text-white font-bold pointer-events-none">
+              <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-bold pointer-events-none">
                 {i + 1}
               </span>
             </div>
@@ -982,15 +990,15 @@ async function getCroppedBlob(
 }
 
 /**
- * 四点透视矫正：通过 Homography / DLT 求解 3×3 透视矩阵，
+ * 四点透视矫正：通过直接求解 Homography 透视矩阵，
  * 逐像素反向映射 + 双线性插值，输出正面矩形。
  *
- * 替代原先的双三角形仿射近似 —— 仿射无法表达透视消失点，
- * 导致矫正结果严重失真。
+ * @param imgSize 原图的自然宽高（用于裁剪映射结果）
  */
 async function warpQuadrilateral(
   imageSrc: string,
-  srcPts: [Pt, Pt, Pt, Pt]
+  srcPts: [Pt, Pt, Pt, Pt],
+  _imgSize: { w: number; h: number }
 ): Promise<Blob> {
   const image = await loadImage(imageSrc)
   const [TL, TR, BR, BL] = srcPts
@@ -1001,16 +1009,16 @@ async function warpQuadrilateral(
 
   // 目标：把源四点映射到目标矩形的四角
   const dst: [Pt, Pt, Pt, Pt] = [
-    { x: 0, y: 0 },         // TL → (0, 0)
-    { x: outW, y: 0 },      // TR → (W, 0)
-    { x: outW, y: outH },   // BR → (W, H)
-    { x: 0, y: outH },      // BL → (0, H)
+    { x: 0, y: 0 },
+    { x: outW - 1, y: 0 },
+    { x: outW - 1, y: outH - 1 },
+    { x: 0, y: outH - 1 },
   ]
 
-  const H = computeHomography(srcPts, dst)       // src → dst 的 3×3 矩阵
-  const Hinv = invertHomography(H)                // dst → src 的逆矩阵（反向映射用）
+  // H: src → dst 的 3×3 矩阵，行主序 [h11,h12,h13, h21,h22,h23, h31,h32,h33=1]
+  const H = computeHomographyDirect(srcPts, dst)
 
-  // 在屏幕外 canvas 上绘制原图，便于逐像素读取
+  // 在屏幕外 canvas 上绘制原图，获取像素数据
   const srcCanvas = document.createElement("canvas")
   srcCanvas.width = image.naturalWidth
   srcCanvas.height = image.naturalHeight
@@ -1023,32 +1031,53 @@ async function warpQuadrilateral(
   out.width = outW
   out.height = outH
   const outCtx = out.getContext("2d")!
-  const outData = outCtx.createImageData(outW, outH)
 
-  const sw = srcCanvas.width
-  const sh = srcCanvas.height
+  // 白色背景
+  outCtx.fillStyle = "#ffffff"
+  outCtx.fillRect(0, 0, outW, outH)
+  const outData = outCtx.getImageData(0, 0, outW, outH)
+  const outPixels = outData.data
+
+  const sw = srcData.width
+  const sh = srcData.height
   const srcPixels = srcData.data
-  const dstPixels = outData.data
 
-  // 逐像素反向映射
+  // 逐像素反向映射：dst 坐标 (u,v) → 经 H 映射到 src 坐标 (sx,sy)
   for (let v = 0; v < outH; v++) {
     for (let u = 0; u < outW; u++) {
-      // 齐次坐标 [u, v, 1] 经 Hinv 映射回源图坐标
-      const w = Hinv[6] * u + Hinv[7] * v + Hinv[8]
-      const sx = (Hinv[0] * u + Hinv[1] * v + Hinv[2]) / w
-      const sy = (Hinv[3] * u + Hinv[4] * v + Hinv[5]) / w
+      // 齐次变换: [sx', sy', w'] = H · [u, v, 1]  (H: dst→src 是反方向)
+      // 但我们计算的是 H: src→dst，所以这里用正向映射的反解:
+      // 已知 dst(u,v)，求对应的 src(x,y)
+      // 公式来自: H 将 (x,y) 映射到 (u',v',w') where u=u'/w', v=v'/w'
+      // 但我们有 u,v 和 H，需要反解 (x,y)
+      // 
+      // 设 [x,y,1] 经 H 得 [u', v', w']: u'=h11·x+h12·y+h13, v'=h21·x+h22·y+h23, w'=h31·x+h32·y+1
+      // u = u'/w', v = v'/w'
+      //
+      // 反向求解: 对于给定的 (u,v)，求对应的 (x,y)
+      // 整理得线性方程组:
+      // (h11 - h31·u)·x + (h12 - h32·u)·y = u - h13
+      // (h21 - h31·v)·x + (h22 - h32·v)·y = v - h23
+      //
+      // 用 Cramer 法则求解 2×2 系统
+
+      const a = H[0] - H[6] * u
+      const b = H[1] - H[7] * u
+      const c = H[3] - H[6] * v
+      const d = H[4] - H[7] * v
+      const e = u - H[2]
+      const f = v - H[5]
+
+      const det = a * d - b * c
+      if (Math.abs(det) < 1e-10) continue
+
+      const sx = (e * d - b * f) / det
+      const sy = (a * f - e * c) / det
 
       const di = (v * outW + u) * 4
 
       // 边界检查
-      if (sx < 0 || sx >= sw - 1 || sy < 0 || sy >= sh - 1) {
-        // 超出源图范围 → 白色
-        dstPixels[di] = 255
-        dstPixels[di + 1] = 255
-        dstPixels[di + 2] = 255
-        dstPixels[di + 3] = 255
-        continue
-      }
+      if (sx < 0 || sx >= sw - 1 || sy < 0 || sy >= sh - 1) continue
 
       // 双线性插值
       const fx = Math.floor(sx)
@@ -1057,20 +1086,20 @@ async function warpQuadrilateral(
       const dy = sy - fy
 
       const i00 = (fy * sw + fx) * 4
-      const i10 = (fy * sw + (fx + 1)) * 4
-      const i01 = ((fy + 1) * sw + fx) * 4
-      const i11 = ((fy + 1) * sw + (fx + 1)) * 4
+      const i10 = (fy * sw + Math.min(fx + 1, sw - 1)) * 4
+      const i01 = (Math.min(fy + 1, sh - 1) * sw + fx) * 4
+      const i11 = (Math.min(fy + 1, sh - 1) * sw + Math.min(fx + 1, sw - 1)) * 4
 
-      for (let c = 0; c < 3; c++) {
-        const v00 = srcPixels[i00 + c]
-        const v10 = srcPixels[i10 + c]
-        const v01 = srcPixels[i01 + c]
-        const v11 = srcPixels[i11 + c]
+      for (let ch = 0; ch < 3; ch++) {
+        const v00 = srcPixels[i00 + ch]
+        const v10 = srcPixels[i10 + ch]
+        const v01 = srcPixels[i01 + ch]
+        const v11 = srcPixels[i11 + ch]
         const top = v00 + (v10 - v00) * dx
         const bot = v01 + (v11 - v01) * dx
-        dstPixels[di + c] = Math.round(top + (bot - top) * dy)
+        outPixels[di + ch] = Math.round(top + (bot - top) * dy)
       }
-      dstPixels[di + 3] = 255
+      outPixels[di + 3] = 255
     }
   }
 
@@ -1084,144 +1113,61 @@ async function warpQuadrilateral(
   })
 }
 
-/* ---------------- Homography helpers ---------------- */
+/* ---------------- Homography — 直接求解（高斯消元 8×8） ---------------- */
 
 /**
- * DLT（直接线性变换）求解 4 对点的透视变换矩阵 H（3×3）。
- * H 将 src → dst（即 dst ~ H × src）。
- * 返回 9 个元素的列主序数组 [h11,h21,h31, h12,h22,h32, h13,h23,h33]。
+ * 直接求解 4 对点的透视变换矩阵 H（3×3，h33 归一化为 1）。
+ * H 将 src → dst，即 dst = H · src（齐次坐标）。
+ * 返回行主序 9 个元素 [h11, h12, h13, h21, h22, h23, h31, h32, 1]。
  */
-function computeHomography(
+function computeHomographyDirect(
   src: [Pt, Pt, Pt, Pt],
   dst: [Pt, Pt, Pt, Pt]
 ): number[] {
-  // 构建 8×9 矩阵 A，每对点提供两行方程
-  const A: number[] = []
+  // 8×8 增广矩阵 [A | b]，求解 A·h = b
+  const M: number[][] = []
   for (let i = 0; i < 4; i++) {
     const x = src[i].x
     const y = src[i].y
     const u = dst[i].x
     const v = dst[i].y
-    // 行 2i   : [-x, -y, -1, 0, 0, 0, x*u, y*u, u]
-    A.push(-x, -y, -1, 0, 0, 0, x * u, y * u, u)
-    // 行 2i+1 : [0, 0, 0, -x, -y, -1, x*v, y*v, v]
-    A.push(0, 0, 0, -x, -y, -1, x * v, y * v, v)
+    // 行 2i:   [-x, -y, -1, 0, 0, 0, x*u, y*u  |  -u]
+    M.push([-x, -y, -1, 0, 0, 0, x * u, y * u, -u])
+    // 行 2i+1: [0, 0, 0, -x, -y, -1, x*v, y*v  |  -v]
+    M.push([0, 0, 0, -x, -y, -1, x * v, y * v, -v])
   }
 
-  // SVD 求解 A·h = 0 的最小二乘解（等于 A^T·A 的最小特征值对应特征向量）
-  // 用幂迭代法求 9×9 矩阵 A^T·A 的最小特征向量
-  const h = solveNullspace(A, 9)
-  return h
-}
+  // 高斯消元 + 回代
+  const n = 8
+  for (let col = 0; col < n; col++) {
+    // 选主元
+    let pivot = col
+    for (let row = col + 1; row < n; row++) {
+      if (Math.abs(M[row][col]) > Math.abs(M[pivot][col])) pivot = row
+    }
+    if (Math.abs(M[pivot][col]) < 1e-15) continue
+    ;[M[col], M[pivot]] = [M[pivot], M[col]]
 
-/**
- * 矩阵求逆：计算 H 的逆矩阵，用于反向映射（dst → src）。
- */
-function invertHomography(H: number[]): number[] {
-  // 3x3 矩阵求逆公式
-  const det =
-    H[0] * (H[4] * H[8] - H[5] * H[7]) -
-    H[1] * (H[3] * H[8] - H[5] * H[6]) +
-    H[2] * (H[3] * H[7] - H[4] * H[6])
-
-  if (Math.abs(det) < 1e-15) return [1, 0, 0, 0, 1, 0, 0, 0, 1] // 退化为单位矩阵
-
-  const invDet = 1 / det
-  return [
-    (H[4] * H[8] - H[5] * H[7]) * invDet,
-    (H[2] * H[7] - H[1] * H[8]) * invDet,
-    (H[1] * H[5] - H[2] * H[4]) * invDet,
-    (H[5] * H[6] - H[3] * H[8]) * invDet,
-    (H[0] * H[8] - H[2] * H[6]) * invDet,
-    (H[2] * H[3] - H[0] * H[5]) * invDet,
-    (H[3] * H[7] - H[4] * H[6]) * invDet,
-    (H[1] * H[6] - H[0] * H[7]) * invDet,
-    (H[0] * H[4] - H[1] * H[3]) * invDet,
-  ]
-}
-
-/**
- * 幂迭代法求解 A^T·A 最小特征值对应的特征向量。
- * A 以行主序存储，rows = 8, cols = 9。
- */
-function solveNullspace(A: number[], n: number): number[] {
-  // 构造 B = A^T·A
-  const B = new Array(n * n).fill(0)
-  const rows = 8
-  for (let i = 0; i < rows; i++) {
-    const ai = i * n
-    for (let p = 0; p < n; p++) {
-      for (let q = 0; q < n; q++) {
-        B[p * n + q] += A[ai + p] * A[ai + q]
+    // 消去下方
+    for (let row = col + 1; row < n; row++) {
+      const factor = M[row][col] / M[col][col]
+      for (let j = col; j <= n; j++) {
+        M[row][j] -= factor * M[col][j]
       }
     }
   }
 
-  // 幂迭代找最大特征值
-  let v = new Array(n).fill(0).map((_, i) => i === n - 1 ? 1 : Math.random() * 0.01)
-  for (let iter = 0; iter < 30; iter++) {
-    // v = B · v
-    const next = new Array(n).fill(0)
-    for (let i = 0; i < n; i++) {
-      for (let j = 0; j < n; j++) {
-        next[i] += B[i * n + j] * v[j]
-      }
+  // 回代
+  const h = new Array(n).fill(0)
+  for (let i = n - 1; i >= 0; i--) {
+    let sum = M[i][n]
+    for (let j = i + 1; j < n; j++) {
+      sum -= M[i][j] * h[j]
     }
-    // 归一化
-    let norm = 0
-    for (let i = 0; i < n; i++) norm += next[i] * next[i]
-    norm = Math.sqrt(norm)
-    if (norm < 1e-15) break
-    for (let i = 0; i < n; i++) next[i] /= norm
-    v = next
+    h[i] = Math.abs(M[i][i]) > 1e-15 ? sum / M[i][i] : 0
   }
 
-  // 最大特征向量已得到。对于最小特征值，我们对 B 做平移后再次迭代
-  // B' = B - λ_max·I，则 B' 的最小特征值对应 λ_min - λ_max
-  // 更简单：直接对 B 的逆做幂迭代。但这里用交替投影法。
-  // 实际上，用 SVD via Jacobi 或直接调 numeric 库更稳妥。
-  // 简化方案：对 B 平移后重新幂迭代找最小特征向量
-  const lambdaMax = dot(v, matVecMul(B, n, v))
-  // B_shifted = B - lambdaMax * I
-  const Bs = B.slice()
-  for (let i = 0; i < n; i++) Bs[i * n + i] -= lambdaMax
-
-  // 用原 v 的值（非零）初始化，做幂迭代找 Bs 的最大特征向量模长最大（对应 λ ≈ lambdaMax - lambdaMin 的绝对值最大）
-  // Bs 的所有特征值 ≤ 0，所以绝对值最大的 = 最负的 = λ_min - λ_max
-  // 带符号：选一个与 v 正交的初始向量
-  let w = new Array(n).fill(0).map(() => Math.random() - 0.5)
-  // 正交化（去除 v 分量）
-  const vDotW = dot(w, v)
-  for (let i = 0; i < n; i++) w[i] -= vDotW * v[i]
-  const normW = Math.sqrt(dot(w, w))
-  for (let i = 0; i < n; i++) w[i] /= normW
-
-  for (let iter = 0; iter < 40; iter++) {
-    const next = matVecMul(Bs, n, w)
-    // 再次正交化（去 v 分量）
-    const proj = dot(next, v)
-    for (let i = 0; i < n; i++) next[i] -= proj * v[i]
-    const nrm = Math.sqrt(dot(next, next))
-    if (nrm < 1e-15) break
-    for (let i = 0; i < n; i++) next[i] /= nrm
-    w = next
-  }
-
-  return w
+  // 行主序: [h11, h12, h13, h21, h22, h23, h31, h32, 1]
+  return [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], 1]
 }
 
-function matVecMul(M: number[], n: number, v: number[]): number[] {
-  const r = new Array(n).fill(0)
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      r[i] += M[i * n + j] * v[j]
-    }
-  }
-  return r
-}
-
-function dot(a: number[], b: number[]): number {
-  let s = 0
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i]
-  return s
-}

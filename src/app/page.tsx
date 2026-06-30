@@ -13,7 +13,6 @@ import { compressImage, compressBlob, ImageTooLargeError } from "@/lib/imageComp
 import { buildAndDownloadPdf } from "@/lib/clientPdfBuilder"
 
 export default function Home() {
-  // Image-to-PDF converter state
   const [images, setImages] = useState<{ id: string; file: File; url: string }[]>([])
   const [converting, setConverting] = useState(false)
   const [convertError, setConvertError] = useState<string | null>(null)
@@ -211,20 +210,24 @@ export default function Home() {
     { path: "/hello", file: "cloud-functions/hello.py", desc: "静态路由 — 文件名直接映射为路径" },
     { path: "/api/posts", file: "cloud-functions/api/posts/index.py", desc: "index.py 作为目录的默认处理函数" },
     { path: "/api/users/u-42", file: "cloud-functions/api/users/[userId].py", desc: "[userId] 捕获单个动态路径段" },
-    { path: "/api/users/u-42/posts/p-7", file: "cloud-functions/api/users/[userId]/posts/[postId].py", desc: "嵌套动态参数：[userId] 与 [postId]" },
-    { path: "/api/files/docs/guide/intro.md", file: "cloud-functions/api/files/[[path]].py", desc: "[[path]] 捕获剩余所有路径段" },
+    { path: "/api/users/u-42/posts/p-7", file: "cloud-functions/api/users/[userId]/posts/[postId].py", desc: "嵌套动态参数" },
+    { path: "/api/files/docs/guide/intro.md", file: "cloud-functions/api/files/[[path]].py", desc: "[[path]] 捕获剩余路径段" },
   ]
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 antialiased">
-      {/* ── Header (glass) ── */}
+    <div className="min-h-screen bg-[#f8fafc] text-slate-700 antialiased">
+      {/* ── 背景光效 ── */}
+      <div className="gradient-orb gradient-orb-1" />
+      <div className="gradient-orb gradient-orb-2" />
+      <div className="gradient-orb gradient-orb-3" />
+      <div className="dot-pattern" />
+
+      {/* ── Header (毛玻璃) ── */}
       <header className="sticky top-0 z-20 glass-nav">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            {/* Logo */}
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm shadow-blue-500/20">
-              <svg width="18" height="18" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <rect width="32" height="32" rx="6" fill="none"/>
+        <div className="max-w-3xl mx-auto px-5 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+              <svg width="20" height="20" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <path d="M7 5h12l6 6v16a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="none" stroke="white" strokeWidth="1.8" strokeLinejoin="round"/>
                 <path d="M19 5v6h6" fill="none" stroke="white" strokeWidth="1.8" strokeLinejoin="round"/>
                 <rect x="10" y="13" width="12" height="10" rx="1.5" fill="none" stroke="white" strokeWidth="1.5"/>
@@ -232,49 +235,55 @@ export default function Home() {
                 <circle cx="20.5" cy="15.5" r="1" fill="white"/>
               </svg>
             </div>
-            <span className="font-semibold text-[15px] tracking-tight text-slate-800">图片转 PDF</span>
-            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-[10px] font-medium text-blue-600 border border-blue-100">
-              <Sparkles className="w-2.5 h-2.5" />免费在线工具
+            <span className="font-bold text-lg tracking-tight text-slate-800">图片转 PDF</span>
+            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-xs font-semibold text-blue-600 border border-blue-100">
+              <Sparkles className="w-3 h-3" />免费在线
             </span>
           </div>
 
-          <a href="https://github.com/sxwzxc/topdf" target="_blank" rel="noopener noreferrer"
-             className="text-slate-400 hover:text-slate-600 transition-colors p-1.5 rounded-lg hover:bg-slate-100" aria-label="GitHub">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd"/>
-            </svg>
-          </a>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline-flex items-center text-[10px] font-medium text-slate-300 select-none tracking-wide">
+              made by <span className="ml-0.5 text-slate-400 font-semibold">sxw</span>
+            </span>
+            <a href="https://github.com/sxwzxc/topdf" target="_blank" rel="noopener noreferrer"
+               className="text-slate-400 hover:text-slate-600 transition-colors p-2 rounded-xl hover:bg-slate-100" aria-label="GitHub">
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd"/>
+              </svg>
+            </a>
+          </div>
         </div>
       </header>
 
       {/* ── Main ── */}
-      <main className="relative z-10 max-w-2xl mx-auto px-4 py-8 space-y-6 animate-fade-in-up">
+      <main className="relative z-10 max-w-3xl mx-auto px-5 py-10 space-y-8 animate-fade-in-up">
 
         {/* ── Hero ── */}
-        <div className="text-center max-w-md mx-auto pb-2">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            图片转 PDF
+        <div className="text-center max-w-lg mx-auto pb-2">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
+            图片转 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 to-blue-600">PDF</span>
           </h1>
-          <p className="mt-1.5 text-sm text-slate-500 leading-relaxed">
-            拖拽上传 · 编辑裁剪 · 一键合成 — 免费 · 安全 · 无需注册
+          <p className="mt-3 text-base text-slate-500 leading-relaxed">
+            拖拽上传 · 在线编辑 · 一键合成 — 免费 · 安全 · 无需注册
           </p>
         </div>
 
-        {/* ── Converter Card ── */}
-        <Card className="card-premium rounded-2xl overflow-hidden">
-          <CardHeader className="pb-1 pt-5 px-5">
-            <CardTitle className="text-sm font-medium flex items-center gap-2 text-slate-500">
-              <FileImage className="w-4 h-4 text-blue-500" />
+        {/* ── 主卡片 (毛玻璃) ── */}
+        <Card className="glass-card rounded-3xl overflow-hidden shadow-lg">
+          <div className="gradient-line" />
+          <CardHeader className="pb-2 pt-6 px-6">
+            <CardTitle className="text-base font-semibold flex items-center gap-2.5 text-slate-500">
+              <FileImage className="w-5 h-5 text-blue-500" />
               <span>上传图片</span>
               <span
-                className={`ml-auto text-xs bg-blue-50 text-blue-600 px-2.5 py-0.5 rounded-full font-medium ${images.length > 1 ? "" : "hidden"}`}
+                className={`ml-auto text-sm bg-blue-50 text-blue-600 px-3 py-1 rounded-full font-semibold ${images.length > 1 ? "" : "hidden"}`}
               >
                 {images.length} 页
               </span>
             </CardTitle>
           </CardHeader>
 
-          <CardContent className="space-y-4 px-5 pb-5">
+          <CardContent className="space-y-5 px-6 pb-6">
             <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" />
 
             {/* Drop zone */}
@@ -283,42 +292,42 @@ export default function Home() {
               onDragOver={e => { e.preventDefault(); if (!compressing) setIsDragging(true) }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              className={`dropzone flex flex-col items-center justify-center gap-2.5 py-12 px-4 transition-all ${compressing ? "opacity-50 pointer-events-none" : "cursor-pointer"} ${isDragging && !compressing ? "dropzone-active" : ""}`}
+              className={`dropzone flex flex-col items-center justify-center gap-3 py-14 px-6 transition-all ${compressing ? "opacity-40 pointer-events-none" : "cursor-pointer"} ${isDragging && !compressing ? "dropzone-active" : ""}`}
             >
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                isDragging ? "bg-blue-500 shadow-lg shadow-blue-500/25" : "bg-blue-50"
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 ${
+                isDragging ? "bg-blue-500 shadow-xl shadow-blue-500/30 scale-110" : "bg-blue-50"
               }`}>
                 {compressing ? (
-                  <Loader2 className={`w-5 h-5 animate-spin ${isDragging ? "text-white" : "text-blue-500"}`} />
+                  <Loader2 className={`w-6 h-6 animate-spin ${isDragging ? "text-white" : "text-blue-500"}`} />
                 ) : (
-                  <Upload className={`w-5 h-5 ${isDragging ? "text-white" : "text-blue-500"}`} />
+                  <Upload className={`w-6 h-6 transition-colors ${isDragging ? "text-white" : "text-blue-500"}`} />
                 )}
               </div>
-              <p className={`text-sm font-medium transition-colors ${isDragging ? "text-blue-600" : "text-slate-600"}`}>
+              <p className={`text-base font-semibold transition-colors ${isDragging ? "text-blue-600" : "text-slate-600"}`}>
                 {compressing
                   ? `压缩中... (${compressingCount.done}/${compressingCount.total})`
-                  : isDragging ? "释放以上传图片" : "点击或拖拽图片到这里"}
+                  : isDragging ? "松开鼠标以上传" : "点击或拖拽图片到这里"}
               </p>
-              <p className={`text-xs transition-colors ${isDragging ? "text-blue-400" : "text-slate-400"}`}>
+              <p className={`text-sm transition-colors ${isDragging ? "text-blue-400" : "text-slate-400"}`}>
                 支持 JPG · PNG · WEBP · GIF · BMP · 单张最大 50MB
               </p>
             </div>
 
-            {/* Thumbnails */}
+            {/* 缩略图 */}
             {images.length > 0 && (
-              <div className="space-y-3 stagger">
+              <div className="space-y-4 stagger">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-400">点击编辑 · 拖拽排序</p>
+                  <p className="text-sm text-slate-400">点击编辑 · 拖拽排序</p>
                   <button
                     onClick={clearAll}
                     disabled={compressing}
-                    className="text-xs text-slate-400 hover:text-red-500 disabled:opacity-30 transition-colors cursor-pointer"
+                    className="text-sm text-slate-400 hover:text-red-500 disabled:opacity-30 transition-colors cursor-pointer font-medium"
                   >
-                    清空
+                    清空全部
                   </button>
                 </div>
 
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 max-h-[55vh] overflow-y-auto pr-0.5">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[60vh] overflow-y-auto pr-1">
                   {images.map((img, idx) => (
                     <div
                       key={img.id}
@@ -333,86 +342,86 @@ export default function Home() {
                         ${dragIndex === idx ? "thumb-item-dragging" : ""}`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img.url} alt={`第 ${idx + 1} 页`}
+                      <img src={img.url} alt={`第 ${idx + 1} 张图片`}
                            className="w-full h-full object-cover pointer-events-none" />
 
-                      {/* Page number */}
-                      <div className="absolute top-1.5 left-1.5 flex gap-1">
-                        <span className="w-5 h-5 rounded-md bg-slate-900/75 backdrop-blur-sm flex items-center justify-center text-[9px] text-white font-medium">
+                      {/* 序号 */}
+                      <div className="absolute top-2 left-2">
+                        <span className="w-6 h-6 rounded-lg bg-slate-900/70 backdrop-blur-md flex items-center justify-center text-[11px] text-white font-semibold">
                           {idx + 1}
                         </span>
                       </div>
 
-                      {/* Delete */}
+                      {/* 删除 */}
                       <button
                         onClick={e => { e.stopPropagation(); removeImage(img.id) }}
-                        className="absolute top-1.5 right-1.5 w-5 h-5 rounded-md bg-white/90 hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all shadow-sm cursor-pointer backdrop-blur-sm"
+                        className="absolute top-2 right-2 w-6 h-6 rounded-lg bg-white/90 hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all shadow-md cursor-pointer backdrop-blur-sm"
                         aria-label="删除"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
 
-                      {/* Bottom toolbar */}
-                      <div className="absolute bottom-1.5 left-1.5 right-1.5 flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      {/* 排序按钮 */}
+                      <div className="absolute bottom-2 left-2 right-2 flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <button
                           onClick={e => { e.stopPropagation(); moveImage(idx, -1) }}
                           disabled={idx === 0}
-                          className="w-5 h-5 rounded-md bg-white/90 hover:bg-blue-50 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors shadow-sm cursor-pointer backdrop-blur-sm"
+                          className="w-6 h-6 rounded-lg bg-white/90 hover:bg-blue-50 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors shadow-md cursor-pointer backdrop-blur-sm"
                           aria-label="上移"
                         >
-                          <ArrowUp className="w-3 h-3" />
+                          <ArrowUp className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={e => { e.stopPropagation(); moveImage(idx, 1) }}
                           disabled={idx === images.length - 1}
-                          className="w-5 h-5 rounded-md bg-white/90 hover:bg-blue-50 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors shadow-sm cursor-pointer backdrop-blur-sm"
+                          className="w-6 h-6 rounded-lg bg-white/90 hover:bg-blue-50 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-slate-500 hover:text-blue-600 transition-colors shadow-md cursor-pointer backdrop-blur-sm"
                           aria-label="下移"
                         >
-                          <ArrowDown className="w-3 h-3" />
+                          <ArrowDown className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
                   ))}
 
-                  {/* Add more tile */}
+                  {/* 添加更多 */}
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={compressing}
-                    className="thumb-item disabled:opacity-30 flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50/50 cursor-pointer border-dashed"
+                    className="thumb-item disabled:opacity-30 flex flex-col items-center justify-center gap-1.5 text-slate-400 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50/50 cursor-pointer border-dashed border-2 border-slate-200"
                     aria-label="添加更多图片"
                   >
-                    <ImagePlus className="w-5 h-5" />
-                    <span className="text-[10px] font-medium">添加</span>
+                    <ImagePlus className="w-6 h-6" />
+                    <span className="text-xs font-semibold">添加</span>
                   </button>
                 </div>
 
-                {/* Action bar */}
-                <div className="flex flex-col gap-2.5 pt-1">
+                {/* 操作按钮 */}
+                <div className="flex flex-col gap-3 pt-2">
                   {convertError && (
-                    <div className="px-3 py-2.5 rounded-xl border border-red-200 bg-red-50 text-xs text-red-600">
+                    <div className="px-4 py-3 rounded-2xl border border-red-200 bg-red-50 text-sm text-red-600 font-medium">
                       {convertError}
                     </div>
                   )}
                   <Button
                     onClick={handleConvert}
                     disabled={converting || compressing || applyingEdit || clientConverting}
-                    className="w-full h-12 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium rounded-xl cursor-pointer shadow-sm shadow-blue-500/20 hover:shadow-md hover:shadow-blue-500/25 transition-all duration-300"
+                    className="w-full h-14 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold text-base rounded-2xl cursor-pointer shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-300"
                   >
                     {converting ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />转换中...</>
+                      <><Loader2 className="w-5 h-5 mr-2.5 animate-spin" />转换中...</>
                     ) : (
-                      <><Download className="w-4 h-4 mr-2" />{images.length > 1 ? "合并为 PDF" : "转为 PDF"}</>
+                      <><Download className="w-5 h-5 mr-2.5" />{images.length > 1 ? "合并为 PDF" : "转为 PDF"}</>
                     )}
                   </Button>
                   <Button
                     onClick={handleClientConvert}
                     disabled={clientConverting || converting || compressing || applyingEdit}
-                    className="w-full h-11 bg-white hover:bg-slate-50 text-slate-600 font-medium rounded-xl border border-slate-200 hover:border-slate-300 cursor-pointer transition-all duration-200 shadow-sm"
+                    className="w-full h-13 bg-white/80 backdrop-blur hover:bg-white text-slate-600 font-semibold text-sm rounded-2xl border border-slate-200/60 hover:border-slate-300 cursor-pointer transition-all duration-200 shadow-sm"
                   >
                     {clientConverting ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />合成中...</>
+                      <><Loader2 className="w-5 h-5 mr-2.5 animate-spin" />合成中...</>
                     ) : (
-                      <><Monitor className="w-4 h-4 mr-2" />客户端合成 PDF</>
+                      <><Monitor className="w-4 h-4 mr-2.5" />客户端合成 PDF</>
                     )}
                   </Button>
                 </div>
@@ -421,43 +430,42 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {/* ── Features ── */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* ── 特性卡片 ── */}
+        <div className="grid grid-cols-3 gap-4">
           {[
-            { icon: Upload, label: "拖拽上传", desc: "批量添加图片" },
-            { icon: FileImage, label: "裁剪矫正", desc: "透视 + 色彩修正" },
-            { icon: Download, label: "一键导出", desc: "高质量 PDF" },
-          ].map(({ icon: Icon, label, desc }) => (
+            { icon: Upload, label: "拖拽上传", desc: "批量添加图片", tint: "card-tint-lavender", iconBg: "from-violet-50 to-purple-100", iconColor: "text-violet-500" },
+            { icon: FileImage, label: "裁剪矫正", desc: "透视 + 色彩修正", tint: "card-tint-mint", iconBg: "from-emerald-50 to-teal-100", iconColor: "text-emerald-500" },
+            { icon: Download, label: "一键导出", desc: "高质量 PDF", tint: "card-tint-pink", iconBg: "from-rose-50 to-pink-100", iconColor: "text-rose-500" },
+          ].map(({ icon: Icon, label, desc, tint, iconBg, iconColor }) => (
             <div key={label}
-              className="card-premium rounded-xl p-3.5 flex flex-col items-center gap-1.5 text-center cursor-default"
+              className={`card-solid rounded-2xl p-5 flex flex-col items-center gap-2 text-center cursor-default ${tint}`}
             >
-              <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
-                <Icon className="w-4 h-4 text-blue-500" />
+              <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${iconBg} flex items-center justify-center`}>
+                <Icon className={`w-5 h-5 ${iconColor}`} />
               </div>
-              <span className="text-xs font-semibold text-slate-700">{label}</span>
-              <span className="text-[10px] text-slate-400 leading-tight">{desc}</span>
+              <span className="text-sm font-bold text-slate-700">{label}</span>
+              <span className="text-xs text-slate-400 leading-tight">{desc}</span>
             </div>
           ))}
         </div>
 
-        {/* ── Advanced (API Docs) ── */}
+        {/* ── API 文档 ── */}
         <button
           onClick={() => setShowAdvanced(p => !p)}
-          className="w-full flex items-center justify-between px-2 py-2 text-xs text-slate-400 hover:text-slate-500 transition-colors cursor-pointer"
+          className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-slate-400 hover:text-slate-500 transition-colors cursor-pointer"
         >
           <span>API 文档</span>
-          {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
 
         {showAdvanced && (
-          <div className="space-y-3 animate-fade-in">
-            {/* File structure */}
-            <div className="card-premium rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <FolderTree className="w-3.5 h-3.5 text-blue-500" />
-                <span className="text-xs font-medium text-slate-500">文件路由</span>
+          <div className="space-y-4 animate-fade-in">
+            <div className="card-solid rounded-2xl p-5">
+              <div className="flex items-center gap-2.5 mb-3.5">
+                <FolderTree className="w-4 h-4 text-blue-500" />
+                <span className="text-sm font-semibold text-slate-500">文件路由</span>
               </div>
-              <pre className="text-[11px] text-slate-500 font-mono leading-relaxed overflow-x-auto">{`cloud-functions/
+              <pre className="text-xs text-slate-500 font-mono leading-relaxed overflow-x-auto">{`cloud-functions/
 ├── hello.py                       → GET /hello
 ├── api/
 │   ├── posts/index.py             → GET /api/posts
@@ -466,43 +474,42 @@ export default function Home() {
 │   └── files/[[path]].py          → GET /api/files/*path`}</pre>
             </div>
 
-            {/* API endpoints */}
             {apiEndpoints.map(ep => {
               const res = apiResults[ep.path]
               const loading = loadingStates[ep.path]
               const isExpanded = expandedCode === ep.path
               return (
-                <div key={ep.path} className="card-premium rounded-xl overflow-hidden">
-                  <div className="flex items-center justify-between gap-2 px-3.5 py-3">
-                    <div className="flex items-center gap-2 min-w-0">
+                <div key={ep.path} className="card-solid rounded-2xl overflow-hidden">
+                  <div className="flex items-center justify-between gap-3 px-5 py-4">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <span className="method-badge shrink-0">GET</span>
-                      <span className="text-xs font-mono text-slate-700 truncate">{ep.path}</span>
+                      <span className="text-sm font-mono text-slate-700 truncate">{ep.path}</span>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         onClick={() => setExpandedCode(isExpanded ? null : ep.path)}
-                        className="text-slate-400 hover:text-blue-500 transition-colors cursor-pointer p-0.5"
+                        className="text-slate-400 hover:text-blue-500 transition-colors cursor-pointer p-1"
                       >
-                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                       <Button size="sm" onClick={() => callApi(ep.path)} disabled={loading}
-                              className="h-7 px-2.5 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-700 text-[10px] rounded-lg cursor-pointer border border-slate-200">
-                        {loading ? <div className="w-2.5 h-2.5 border border-slate-400 border-t-transparent rounded-full animate-spin" />
-                          : <Play className="w-2.5 h-2.5" />}
-                        <span className="ml-1">调用</span>
+                              className="h-9 px-4 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-700 text-xs rounded-xl cursor-pointer border border-slate-200 font-semibold">
+                        {loading ? <div className="w-3 h-3 border border-slate-400 border-t-transparent rounded-full animate-spin" />
+                          : <Play className="w-3 h-3" />}
+                        <span className="ml-1.5">调用</span>
                       </Button>
                     </div>
                   </div>
                   {isExpanded && (
-                    <div className="px-3.5 pb-2.5 border-t border-slate-100 pt-2.5">
-                      <p className="text-[10px] text-slate-400 font-mono mb-1">{ep.file}</p>
-                      <p className="text-[10px] text-slate-500">{ep.desc}</p>
+                    <div className="px-5 pb-4 border-t border-slate-100 pt-4">
+                      <p className="text-[11px] text-slate-400 font-mono mb-1.5">{ep.file}</p>
+                      <p className="text-xs text-slate-500">{ep.desc}</p>
                     </div>
                   )}
                   {res && (
-                    <div className="border-t border-slate-100 px-3.5 py-2.5">
-                      <p className="text-[10px] text-slate-400 font-mono mb-1">响应 ({res.status})</p>
-                      <pre className="text-[10px] text-emerald-700 font-mono whitespace-pre-wrap break-all bg-emerald-50/50 rounded-lg p-2.5">{res.data}</pre>
+                    <div className="border-t border-slate-100 px-5 py-4">
+                      <p className="text-[11px] text-slate-400 font-mono mb-1.5">响应 ({res.status})</p>
+                      <pre className="text-xs text-emerald-700 font-mono whitespace-pre-wrap break-all bg-emerald-50/50 rounded-xl p-4">{res.data}</pre>
                     </div>
                   )}
                 </div>
@@ -513,18 +520,18 @@ export default function Home() {
       </main>
 
       {/* ── Footer ── */}
-      <footer className="relative z-10 text-center py-8 text-[11px] text-slate-400 border-t border-slate-100 mt-4">
+      <footer className="relative z-10 text-center py-10 text-sm text-slate-400 border-t border-slate-100 mt-6">
         <p>
           由{" "}
           <a href="https://pages.edgeone.ai" target="_blank" rel="noopener noreferrer"
-            className="text-slate-500 hover:text-blue-500 transition-colors font-medium">
+            className="text-slate-500 hover:text-blue-500 transition-colors font-semibold">
             EdgeOne Pages
           </a>
-          {" "}提供动力 · 图片在本地处理，安全无忧
+          {" "}提供动力 · 图片本地处理，安全无忧
         </p>
       </footer>
 
-      {/* ── Image Editor Modal ── */}
+      {/* ── 编辑器弹窗 ── */}
       {editingId && (() => {
         const target = images.find(i => i.id === editingId)
         if (!target) return null
