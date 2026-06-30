@@ -187,12 +187,12 @@ export default function Home() {
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-gray-400">
               <FileImage className="w-4 h-4 text-[#3776AB]" />
-              Image{images.length > 1 ? "s" : ""} → PDF
-              {images.length > 1 && (
-                <span className="ml-auto text-xs bg-[#3776AB]/20 text-[#3776AB] px-2 py-0.5 rounded-full font-mono">
-                  {images.length} pages
-                </span>
-              )}
+              <span>Images → PDF</span>
+              <span
+                className={`ml-auto text-xs bg-[#3776AB]/20 text-[#3776AB] px-2 py-0.5 rounded-full font-mono ${images.length > 1 ? "" : "hidden"}`}
+              >
+                {images.length} pages
+              </span>
             </CardTitle>
           </CardHeader>
 
@@ -248,9 +248,7 @@ export default function Home() {
                         <span className="w-5 h-5 rounded-full bg-black/80 flex items-center justify-center text-[9px] text-white font-mono leading-none">
                           {idx + 1}
                         </span>
-                        {images.length > 1 && (
-                          <GripVertical className="w-3.5 h-3.5 text-white/60" />
-                        )}
+                        <GripVertical className={`w-3.5 h-3.5 text-white/60 ${images.length > 1 ? "" : "hidden"}`} />
                       </div>
 
                       {/* Delete */}

@@ -24,9 +24,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en-US" suppressHydrationWarning>
+    <html lang="en-US" translate="no" suppressHydrationWarning>
       <head>
         <meta name="google" content="notranslate" />
+        <meta httpEquiv="Content-Language" content="en-US" />
       </head>
       <body className="antialiased" suppressHydrationWarning>
         {children}
