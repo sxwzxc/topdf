@@ -162,7 +162,7 @@ export default function Home() {
       if (enhanceColors) {
         const enhanced: File[] = []
         for (const f of files) {
-          enhanced.push(await enhanceImageFile(f))
+          enhanced.push(await compressImage(await enhanceImageFile(f)))
         }
         files = enhanced
       }

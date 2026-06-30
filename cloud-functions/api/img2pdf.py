@@ -36,8 +36,12 @@ def _resize_if_needed(img):
     scale = MAX_DIMENSION / longer
     new_w = max(1, int(w * scale))
     new_h = max(1, int(h * scale))
-    # 使用高质量 LANCZOS 重采样
-    return img.resize((new_w, new_h), img.Resampling.LANCZOS)
+    # LANCZOS 重采样（兼容旧版 Pillow）
+    try:
+        return img.resize((new_w, new_h), img.Resampling.LANCZOS)
+    except (AttributeError, NameError):
+        from PIL import Image as _Image
+        return img.resize((new_w, new_h), _Image.LANCZOS)
 
 
 def _build_pdf(pages):
@@ -243,18 +247,14 @@ class handler(BaseHTTPRequestHandler):
                 img.save(jpeg_buf, format="JPEG", quality=90)
                 pages.append((jpeg_buf.getvalue(), img.width, img.height))
                 img.close()
-            except DecompressionBombError:
-                raise ValueError(
-                    "图片 #%d 分辨率过高，Pillow 安全策略阻止了解压。"
-                    "请使用更小尺寸的图片或在前端先压缩。" % (i + 1)
-                )
+            except (DecompressionBombError, ValueError) as e:
+                raise ValueError("图片 #%d 处理失败: %s" % (i + 1, str(e)))
             except MemoryError:
-                raise ValueError(
-                    "图片 #%d 过大导致内存不足。"
-                    "请使用更小尺寸的图片。" % (i + 1)
-                )
+                raise ValueError("图片 #%d 过大导致内存不足。" % (i + 1))
             except OSError as e:
                 raise ValueError("图片 #%d 无法读取或已损坏: %s" % (i + 1, str(e)))
+            except Exception as e:
+                raise ValueError("图片 #%d 处理异常 (%s): %s" % (i + 1, type(e).__name__, str(e)))
 
         if not pages:
             raise ValueError("没有有效的图片可转换为 PDF。")
