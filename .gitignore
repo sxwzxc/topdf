@@ -10,6 +10,7 @@ package-lock.json
 # Next.js
 .next
 next-env.d.ts
+*.tsbuildinfo
 
 # Python
 __pycache__

@@ -10,6 +10,7 @@ Supports two input modes:
 
 GET returns usage info.
 """
+import base64
 import cgi
 import io
 import json
@@ -111,15 +112,19 @@ class handler(BaseHTTPRequestHandler):
 
             pdf_bytes = self._images_to_pdf(image_buffers)
 
+            # EdgeOne 运行时会把 HTTP 响应体当作 UTF-8 文本处理，
+            # 所有 >= 0x80 的字节（包括 JPEG 数据中的 0xFF）会被破坏，
+            # 导致 PDF 空白。用 base64 编码整个 PDF 为纯 ASCII 文本绕过该问题，
+            # 前端再解码还原。
+            b64_bytes = base64.b64encode(pdf_bytes)
+            b64_str = b64_bytes.decode("ascii")
+
             self.send_response(200)
-            self.send_header("Content-Type", "application/pdf")
-            self.send_header(
-                "Content-Disposition", 'attachment; filename="merged.pdf"'
-            )
-            self.send_header("Content-Length", str(len(pdf_bytes)))
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(b64_str)))
             self.send_header("X-Powered-By", "Python Cloud Function")
             self.end_headers()
-            self.wfile.write(pdf_bytes)
+            self.wfile.write(b64_str.encode("ascii"))
         except Exception as e:
             self._send_json(500, {"error": str(e)})
 

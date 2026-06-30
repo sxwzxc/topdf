@@ -121,7 +121,12 @@ export default function Home() {
         try { const d = await res.json(); if (d?.error) msg = d.error } catch { /* not json */ }
         throw new Error(msg)
       }
-      const blob = await res.blob()
+      // 后端用 base64 编码 PDF 以绕过 EdgeOne 运行时对非 ASCII 字节的破坏
+      const b64 = (await res.text()).trim()
+      const bin = atob(b64)
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      const blob = new Blob([bytes], { type: "application/pdf" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
