@@ -328,6 +328,92 @@ body {
 }
 
 /* ============================================
+   Image Editor Modal
+   ============================================ */
+
+.editor-panel {
+  animation: fade-in-up 0.2s ease-out forwards;
+}
+
+.aspect-chip {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: rgba(var(--brand-primary-rgb), 0.08);
+  border: 1px solid rgba(var(--brand-primary-rgb), 0.15);
+  color: #a1a1aa;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aspect-chip:hover {
+  background: rgba(var(--brand-primary-rgb), 0.15);
+  color: white;
+}
+
+.aspect-chip-active {
+  background: rgba(var(--brand-primary-rgb), 0.25);
+  border-color: var(--brand-primary);
+  color: white;
+}
+
+.editor-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(var(--brand-primary-rgb), 0.1);
+  border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+  color: #d4d4d8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.editor-icon-btn:hover {
+  background: rgba(var(--brand-primary-rgb), 0.25);
+  color: white;
+  border-color: var(--brand-primary);
+}
+
+.editor-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(var(--brand-primary-rgb), 0.2);
+  outline: none;
+}
+
+.editor-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.2);
+  transition: box-shadow 0.15s ease;
+}
+
+.editor-range::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 0 5px rgba(var(--brand-primary-rgb), 0.3);
+}
+
+.editor-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.2);
+}
+
+/* ============================================
    Route Card Styles
    ============================================ */
 

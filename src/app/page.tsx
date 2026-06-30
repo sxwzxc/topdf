@@ -3,7 +3,8 @@
 import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Play, ExternalLink, Zap, ChevronDown, ChevronUp, FolderTree, Route, Layers, Upload, FileImage, Download, Loader2, X, ArrowUp, ArrowDown, ImagePlus } from "lucide-react"
+import { Play, ExternalLink, Zap, ChevronDown, ChevronUp, FolderTree, Route, Layers, Upload, FileImage, Download, Loader2, X, ArrowUp, ArrowDown, ImagePlus, Pencil, GripVertical } from "lucide-react"
+import ImageEditor from "@/components/ImageEditor"
 
 interface ApiEndpoint {
   name: string
@@ -77,6 +78,9 @@ export default function Home() {
   const [converting, setConverting] = useState(false)
   const [convertError, setConvertError] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleApiCall = async (endpoint: ApiEndpoint) => {
@@ -137,6 +141,55 @@ export default function Home() {
       next.splice(newIndex, 0, moved)
       return next
     })
+  }
+
+  const handleDragStart = (index: number) => {
+    setDragIndex(index)
+  }
+
+  const handleDragOverItem = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    if (dragIndex === null || dragIndex === index) {
+      setDragOverIndex(null)
+      return
+    }
+    setDragOverIndex(index)
+  }
+
+  const handleDropItem = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    if (dragIndex === null || dragIndex === index) {
+      setDragIndex(null)
+      setDragOverIndex(null)
+      return
+    }
+    setImages(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(dragIndex, 1)
+      next.splice(index, 0, moved)
+      return next
+    })
+    setDragIndex(null)
+    setDragOverIndex(null)
+  }
+
+  const handleDragEnd = () => {
+    setDragIndex(null)
+    setDragOverIndex(null)
+  }
+
+  const applyEdit = (id: string, blob: Blob, fileName: string) => {
+    setImages(prev => {
+      const target = prev.find(i => i.id === id)
+      if (target) URL.revokeObjectURL(target.url)
+      const editedFile = new File([blob], fileName, { type: blob.type })
+      return prev.map(i =>
+        i.id === id
+          ? { ...i, file: editedFile, url: URL.createObjectURL(blob) }
+          : i
+      )
+    })
+    setEditingId(null)
   }
 
   const clearAll = () => {
@@ -271,7 +324,7 @@ export default function Home() {
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium flex items-center gap-2 text-gray-400">
                 <FileImage className="w-4 h-4 text-[#3776AB]" />
-                Images → PDF Converter (Merge Multiple)
+                Images → PDF Converter (Merge · Edit · Reorder)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -311,7 +364,7 @@ export default function Home() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-gray-400 font-mono">
-                      {images.length} image{images.length > 1 ? "s" : ""} selected
+                      {images.length} image{images.length > 1 ? "s" : ""} selected · drag cards to reorder
                     </p>
                     <button
                       onClick={clearAll}
@@ -325,16 +378,28 @@ export default function Home() {
                     {images.map((img, idx) => (
                       <div
                         key={img.id}
-                        className="relative rounded-lg overflow-hidden bg-[#0d1117] border border-[#3776AB]/15 aspect-square group"
+                        draggable
+                        onDragStart={() => handleDragStart(idx)}
+                        onDragOver={(e) => handleDragOverItem(e, idx)}
+                        onDrop={(e) => handleDropItem(e, idx)}
+                        onDragEnd={handleDragEnd}
+                        className={`relative rounded-lg overflow-hidden bg-[#0d1117] border aspect-square group cursor-grab active:cursor-grabbing transition-colors ${
+                          dragOverIndex === idx
+                            ? "border-[#3776AB] ring-2 ring-[#3776AB]/40"
+                            : "border-[#3776AB]/15"
+                        } ${dragIndex === idx ? "opacity-40" : ""}`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={img.url}
                           alt={`Image ${idx + 1}`}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover pointer-events-none"
                         />
-                        <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center text-[10px] text-white font-mono">
-                          {idx + 1}
+                        <div className="absolute top-1 left-1 flex items-center gap-1">
+                          <span className="w-5 h-5 rounded-full bg-black/70 flex items-center justify-center text-[10px] text-white font-mono">
+                            {idx + 1}
+                          </span>
+                          <GripVertical className="w-3.5 h-3.5 text-white/70 bg-black/40 rounded" />
                         </div>
                         <button
                           onClick={(e) => {
@@ -346,29 +411,44 @@ export default function Home() {
                         >
                           <X className="w-3 h-3" />
                         </button>
-                        <div className="absolute bottom-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* Action toolbar */}
+                        <div className="absolute bottom-1 left-1 right-1 flex justify-between items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              moveImage(idx, -1)
+                              setEditingId(img.id)
                             }}
-                            disabled={idx === 0}
-                            className="w-5 h-5 rounded-full bg-black/70 hover:bg-[#3776AB]/80 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
-                            aria-label="Move up"
+                            className="flex-1 h-6 rounded bg-black/70 hover:bg-[#3776AB]/80 flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer text-[10px] gap-1"
+                            aria-label="Edit image"
+                            title="Edit (rotate / crop / straighten)"
                           >
-                            <ArrowUp className="w-3 h-3" />
+                            <Pencil className="w-3 h-3" />
+                            Edit
                           </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              moveImage(idx, 1)
-                            }}
-                            disabled={idx === images.length - 1}
-                            className="w-5 h-5 rounded-full bg-black/70 hover:bg-[#3776AB]/80 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
-                            aria-label="Move down"
-                          >
-                            <ArrowDown className="w-3 h-3" />
-                          </button>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                moveImage(idx, -1)
+                              }}
+                              disabled={idx === 0}
+                              className="w-6 h-6 rounded bg-black/70 hover:bg-[#3776AB]/80 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
+                              aria-label="Move up"
+                            >
+                              <ArrowUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                moveImage(idx, 1)
+                              }}
+                              disabled={idx === images.length - 1}
+                              className="w-6 h-6 rounded bg-black/70 hover:bg-[#3776AB]/80 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
+                              aria-label="Move down"
+                            >
+                              <ArrowDown className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -385,7 +465,7 @@ export default function Home() {
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                     <p className="text-xs text-gray-500">
-                      Drag-hover reorder coming soon — use arrows to change page order.
+                      Hover a thumbnail to edit, move, or delete. Drag to reorder pages.
                     </p>
                     <Button
                       onClick={handleConvert}
@@ -415,6 +495,20 @@ export default function Home() {
               )}
             </CardContent>
           </Card>
+
+          {/* Image Editor Modal */}
+          {editingId && (() => {
+            const target = images.find(i => i.id === editingId)
+            if (!target) return null
+            return (
+              <ImageEditor
+                imageSrc={target.url}
+                fileName={target.file.name}
+                onApply={(blob, fileName) => applyEdit(target.id, blob, fileName)}
+                onCancel={() => setEditingId(null)}
+              />
+            )
+          })()}
 
           {/* File Structure Card */}
           <Card className="glass-card border-0 animate-fade-in-up animation-delay-200">
