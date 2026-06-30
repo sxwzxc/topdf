@@ -452,25 +452,25 @@ export default function Home() {
                     </span>
                   </label>
                   <Button
-                    onClick={handleConvert}
-                    disabled={converting || compressing || applyingEdit || clientConverting}
+                    onClick={handleClientConvert}
+                    disabled={clientConverting || converting || compressing || applyingEdit}
                     className="w-full h-14 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold text-base rounded-2xl cursor-pointer shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all duration-300"
                   >
-                    {converting ? (
-                      <><Loader2 className="w-5 h-5 mr-2.5 animate-spin" />转换中...</>
+                    {clientConverting ? (
+                      <><Loader2 className="w-5 h-5 mr-2.5 animate-spin" />合成中...</>
                     ) : (
                       <><Download className="w-5 h-5 mr-2.5" />{images.length > 1 ? "合并为 PDF" : "转为 PDF"}</>
                     )}
                   </Button>
                   <Button
-                    onClick={handleClientConvert}
-                    disabled={clientConverting || converting || compressing || applyingEdit}
+                    onClick={handleConvert}
+                    disabled={converting || compressing || applyingEdit || clientConverting}
                     className="w-full h-13 bg-white/80 backdrop-blur hover:bg-white text-slate-600 font-semibold text-sm rounded-2xl border border-slate-200/60 hover:border-slate-300 cursor-pointer transition-all duration-200 shadow-sm"
                   >
-                    {clientConverting ? (
-                      <><Loader2 className="w-5 h-5 mr-2.5 animate-spin" />合成中...</>
+                    {converting ? (
+                      <><Loader2 className="w-5 h-5 mr-2.5 animate-spin" />上传中...</>
                     ) : (
-                      <><Monitor className="w-4 h-4 mr-2.5" />客户端合成 PDF</>
+                      <><Monitor className="w-4 h-4 mr-2.5" />云端合成 PDF（可能效果较差）</>
                     )}
                   </Button>
                 </div>
