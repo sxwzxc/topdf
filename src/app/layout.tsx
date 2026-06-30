@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,6 +7,15 @@ export const metadata: Metadata = {
   icons: {
     icon: "/app-icon.svg",
   },
+  // Prevent browser auto-translation from mutating DOM text nodes before
+  // React hydration, which causes React error #418 (hydration mismatch).
+  other: { "google": "notranslate" },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
@@ -15,8 +24,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en-US">
-      <body className="antialiased">
+    <html lang="en-US" suppressHydrationWarning>
+      <head>
+        <meta name="google" content="notranslate" />
+      </head>
+      <body className="antialiased" suppressHydrationWarning>
         {children}
       </body>
     </html>
