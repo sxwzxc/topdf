@@ -1,1 +1,1 @@
-# No external dependencies required for Python handler function
+Pillow>=10.0.0

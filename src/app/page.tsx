@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Play, ExternalLink, Zap, ChevronDown, ChevronUp, FolderTree, Route, Layers } from "lucide-react"
+import { Play, ExternalLink, Zap, ChevronDown, ChevronUp, FolderTree, Route, Layers, Upload, FileImage, Download, Loader2, X } from "lucide-react"
 
 interface ApiEndpoint {
   name: string
@@ -72,6 +72,14 @@ export default function Home() {
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
   const [expandedCode, setExpandedCode] = useState<string | null>(null)
 
+  // Image-to-PDF converter state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [converting, setConverting] = useState(false)
+  const [convertError, setConvertError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const handleApiCall = async (endpoint: ApiEndpoint) => {
     const key = endpoint.path
     setLoadingStates(prev => ({ ...prev, [key]: true }))
@@ -79,6 +87,79 @@ export default function Home() {
     const data = await response.json()
     setResults(prev => ({ ...prev, [key]: { data: JSON.stringify(data, null, 2), status: response.status } }))
     setLoadingStates(prev => ({ ...prev, [key]: false }))
+  }
+
+  const selectFile = (file: File | null) => {
+    setConvertError(null)
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl)
+    }
+    if (!file) {
+      setSelectedFile(null)
+      setPreviewUrl(null)
+      return
+    }
+    if (!file.type.startsWith("image/")) {
+      setConvertError("Please select an image file.")
+      setSelectedFile(null)
+      setPreviewUrl(null)
+      return
+    }
+    setSelectedFile(file)
+    setPreviewUrl(URL.createObjectURL(file))
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    selectFile(e.target.files?.[0] ?? null)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    selectFile(e.dataTransfer.files?.[0] ?? null)
+  }
+
+  const handleConvert = async () => {
+    if (!selectedFile) return
+    setConverting(true)
+    setConvertError(null)
+    try {
+      const response = await fetch("/api/img2pdf", {
+        method: "POST",
+        headers: { "Content-Type": selectedFile.type || "image/*" },
+        body: selectedFile,
+      })
+      if (!response.ok) {
+        let message = `Conversion failed (HTTP ${response.status})`
+        try {
+          const data = await response.json()
+          if (data?.error) message = data.error
+        } catch {
+          // response wasn't JSON
+        }
+        throw new Error(message)
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "converted.pdf"
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setConvertError(err instanceof Error ? err.message : "Conversion failed.")
+    } finally {
+      setConverting(false)
+    }
+  }
+
+  const clearSelection = () => {
+    selectFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const grouped = categoryOrder.map(cat => ({
@@ -156,6 +237,96 @@ export default function Home() {
               </Button>
             </a>
           </div>
+
+          {/* Image to PDF Converter */}
+          <Card className="glass-card border-0 animate-fade-in-up animation-delay-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium flex items-center gap-2 text-gray-400">
+                <FileImage className="w-4 h-4 text-[#3776AB]" />
+                Image → PDF Converter
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+
+              {!previewUrl ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setIsDragging(true)
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={handleDrop}
+                  className={`dropzone flex flex-col items-center justify-center gap-3 py-12 px-6 rounded-lg cursor-pointer transition-colors ${
+                    isDragging ? "dropzone-active" : ""
+                  }`}
+                >
+                  <div className="w-12 h-12 rounded-full bg-[#3776AB]/15 flex items-center justify-center">
+                    <Upload className="w-6 h-6 text-[#3776AB]" />
+                  </div>
+                  <p className="text-sm text-gray-300">
+                    Click to upload or drag &amp; drop an image
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    PNG, JPG, WEBP, GIF, BMP, etc.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="relative rounded-lg overflow-hidden bg-[#0d1117] border border-[#3776AB]/15 flex items-center justify-center max-h-80">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={previewUrl}
+                      alt="Selected preview"
+                      className="max-h-80 w-auto object-contain"
+                    />
+                    <button
+                      onClick={clearSelection}
+                      className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
+                      aria-label="Remove image"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="text-xs text-gray-400 font-mono truncate">
+                      {selectedFile?.name} · {(selectedFile ? selectedFile.size / 1024 : 0).toFixed(1)} KB
+                    </div>
+                    <Button
+                      onClick={handleConvert}
+                      disabled={converting}
+                      className="btn-primary rounded cursor-pointer"
+                    >
+                      {converting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Converting...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4 mr-2" />
+                          Convert to PDF
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {convertError && (
+                <div className="px-3 py-2 rounded border border-red-500/30 bg-red-500/5 text-xs text-red-400">
+                  {convertError}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* File Structure Card */}
           <Card className="glass-card border-0 animate-fade-in-up animation-delay-200">
