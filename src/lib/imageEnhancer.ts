@@ -1,9 +1,8 @@
 /**
- * 图片增强工具 — 将拍照图片优化为类扫描文档效果
- * 白平衡 + 直方图拉伸 + 锐化
+ * 图片增强工具 — 模拟复印机效果
+ * 灰度转换 → 极端直方图拉伸 → 强锐化
  */
 
-/** 加载 File → HTMLImageElement */
 function fileToImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -13,38 +12,27 @@ function fileToImage(file: File): Promise<HTMLImageElement> {
   })
 }
 
-/** 每通道独立直方图拉伸：取 2%~98% 分位 → 0~255 */
-function autoWhiteBalance(
-  pixels: Uint8ClampedArray,
-  total: number,
-  contrast: number
-) {
-  const histR = new Uint32Array(256)
-  const histG = new Uint32Array(256)
-  const histB = new Uint32Array(256)
-
+/** 转为灰度（亮度加权），单通道直方图统计 */
+function toGrayHistogram(pixels: Uint8ClampedArray, total: number) {
+  const hist = new Uint32Array(256)
   for (let i = 0; i < total; i++) {
     const off = i * 4
-    histR[pixels[off]]++
-    histG[pixels[off + 1]]++
-    histB[pixels[off + 2]]++
+    const gray = Math.round(0.299 * pixels[off] + 0.587 * pixels[off + 1] + 0.114 * pixels[off + 2])
+    pixels[off] = pixels[off + 1] = pixels[off + 2] = gray
+    hist[gray]++
   }
+  return hist
+}
 
-  const lowPct = Math.max(0, 0.02 - contrast * 0.03)
-  const highPct = Math.min(1, 0.98 + contrast * 0.02)
-
-  const lowR = percentile(histR, total, lowPct)
-  const highR = percentile(histR, total, highPct)
-  const lowG = percentile(histG, total, lowPct)
-  const highG = percentile(histG, total, highPct)
-  const lowB = percentile(histB, total, lowPct)
-  const highB = percentile(histB, total, highPct)
-
+/** 直方图拉伸：取 low%~high% 分位 → 0~255（单通道） */
+function stretchGray(pixels: Uint8ClampedArray, total: number, hist: Uint32Array, lowPct: number, highPct: number) {
+  const low = percentile(hist, total, lowPct)
+  const high = percentile(hist, total, highPct)
+  if (high <= low) return
   for (let i = 0; i < total; i++) {
     const off = i * 4
-    pixels[off] = stretch(pixels[off], lowR, highR)
-    pixels[off + 1] = stretch(pixels[off + 1], lowG, highG)
-    pixels[off + 2] = stretch(pixels[off + 2], lowB, highB)
+    const v = Math.min(255, Math.max(0, Math.round(((pixels[off] - low) / (high - low)) * 255)))
+    pixels[off] = pixels[off + 1] = pixels[off + 2] = v
   }
 }
 
@@ -58,40 +46,32 @@ function percentile(hist: Uint32Array, total: number, pct: number): number {
   return 255
 }
 
-function stretch(v: number, low: number, high: number): number {
-  if (high <= low) return v
-  return Math.min(255, Math.max(0, Math.round(((v - low) / (high - low)) * 255)))
-}
-
-/** 3×3 Unsharp Mask 锐化 */
-function unsharpMask(data: ImageData, w: number, h: number, amount: number) {
+/** Unsharp Mask 锐化（仅处理灰度，加强版） */
+function unsharpMaskStrong(data: ImageData, w: number, h: number) {
   const src = new Uint8Array(data.data)
-  const strength = amount * 2.5
+  const strength = 1.8
   const k = [1, 2, 1, 2, 4, 2, 1, 2, 1]
   const kSum = 16
 
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
       const idx = (y * w + x) * 4
-      for (let c = 0; c < 3; c++) {
-        let blur = 0
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const ni = ((y + dy) * w + (x + dx)) * 4 + c
-            blur += src[ni] * k[(dy + 1) * 3 + (dx + 1)]
-          }
+      let blur = 0
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          blur += src[((y + dy) * w + (x + dx)) * 4] * k[(dy + 1) * 3 + (dx + 1)]
         }
-        blur /= kSum
-        const original = src[idx + c]
-        const val = original + (original - blur) * strength
-        data.data[idx + c] = Math.min(255, Math.max(0, val))
       }
+      blur /= kSum
+      const v = Math.min(255, Math.max(0, src[idx] + (src[idx] - blur) * strength))
+      data.data[idx] = data.data[idx + 1] = data.data[idx + 2] = Math.round(v)
     }
   }
 }
 
 /**
- * 增强单张图片，返回新的 File（PNG 格式）
+ * 复印机风格增强：灰度 + 极端对比度 + 强锐化
+ * 效果：白底黑字，背景干净，文字锐利，类似扫描/复印输出
  */
 export async function enhanceImageFile(file: File): Promise<File> {
   const img = await fileToImage(file)
@@ -105,13 +85,17 @@ export async function enhanceImageFile(file: File): Promise<File> {
   ctx.drawImage(img, 0, 0)
 
   const imageData = ctx.getImageData(0, 0, w, h)
+  const pixels = imageData.data
   const total = w * h
 
-  // 1. 白平衡 + 直方图拉伸
-  autoWhiteBalance(imageData.data, total, 0.7)
+  // 1. 转灰度 + 统计直方图
+  const hist = toGrayHistogram(pixels, total)
 
-  // 2. 锐化
-  unsharpMask(imageData, w, h, 0.4)
+  // 2. 极端直方图拉伸 (1%~99%) → 背景强制变白、文字强制变黑
+  stretchGray(pixels, total, hist, 0.01, 0.99)
+
+  // 3. 强锐化
+  unsharpMaskStrong(imageData, w, h)
 
   ctx.putImageData(imageData, 0, 0)
 
@@ -119,7 +103,7 @@ export async function enhanceImageFile(file: File): Promise<File> {
     canvas.toBlob(
       (blob) => {
         if (blob) {
-          const name = file.name.replace(/\.[^.]+$/i, "-enhanced.png")
+          const name = file.name.replace(/\.[^.]+$/i, "-scanned.png")
           resolve(new File([blob], name, { type: "image/png" }))
         } else {
           reject(new Error("增强失败"))

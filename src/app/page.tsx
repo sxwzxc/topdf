@@ -440,7 +440,7 @@ export default function Home() {
                     </div>
                     <span className="text-sm text-slate-500 group-hover:text-slate-700 transition-colors flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      优化图片色彩
+                      优化为扫描效果
                     </span>
                   </label>
                   <Button

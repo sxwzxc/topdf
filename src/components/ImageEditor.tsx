@@ -314,10 +314,10 @@ function EnhancePanel({
   setApplying,
 }: EnhancePanelProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [grayscale, setGrayscale] = useState(false)
-  const [contrast, setContrast] = useState(70)   // 0-100, 默认偏高
-  const [sharpen, setSharpen] = useState(40)      // 0-100
-  const [brightness, setBrightness] = useState(50) // 0-100, 50=不调整
+  const [grayscale, setGrayscale] = useState(true)     // 默认灰度（复印风格）
+  const [contrast, setContrast] = useState(85)          // 0-100, 默认高对比
+  const [sharpen, setSharpen] = useState(60)            // 0-100, 默认高锐化
+  const [brightness, setBrightness] = useState(50)      // 0-100, 50=不调整
   const imgRef = useRef<HTMLImageElement>(null)
 
   // 载入原图后自动生成预览
@@ -1004,9 +1004,18 @@ async function warpQuadrilateral(
   const image = await loadImage(imageSrc)
   const [TL, TR, BR, BL] = srcPts
 
-  // 输出尺寸 — 取对边 max 保留完整区域
-  const outW = Math.max(2, Math.round(Math.max(dist(TL, TR), dist(BL, BR))))
-  const outH = Math.max(2, Math.round(Math.max(dist(TL, BL), dist(TR, BR))))
+  // 输出尺寸：几何平均维持原始比例，再以最长边为基准缩放（类 PS 透视裁剪）
+  const topLen = dist(TL, TR)
+  const botLen = dist(BL, BR)
+  const leftLen = dist(TL, BL)
+  const rightLen = dist(TR, BR)
+  const gmW = Math.sqrt(topLen * botLen)   // 宽度的几何平均
+  const gmH = Math.sqrt(leftLen * rightLen) // 高度的几何平均
+  const longestEdge = Math.max(topLen, botLen, leftLen, rightLen)
+  const gmLonger = Math.max(gmW, gmH)
+  const scale = longestEdge / gmLonger
+  const outW = Math.max(2, Math.round(gmW * scale))
+  const outH = Math.max(2, Math.round(gmH * scale))
 
   // H: src → dst (3×3 行主序，h33=1)
   const H = computeHomographyDirect(srcPts, [
