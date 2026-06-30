@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Upload, Download, Loader2, X, ArrowUp, ArrowDown,
-  ImagePlus, Pencil, GripVertical, ChevronDown, ChevronUp,
+  ImagePlus, GripVertical, ChevronDown, ChevronUp,
   Play, FolderTree, Route, Layers, FileImage,
 } from "lucide-react"
 import ImageEditor from "@/components/ImageEditor"
@@ -224,7 +224,7 @@ export default function Home() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500">
-                    拖拽排序 · 悬停编辑
+                    点击编辑 · 拖拽排序
                   </p>
                   <button onClick={clearAll} className="text-xs text-gray-500 hover:text-red-400 transition-colors cursor-pointer">
                     清空
@@ -236,11 +236,12 @@ export default function Home() {
                     <div
                       key={img.id}
                       draggable
+                      onClick={() => setEditingId(img.id)}
                       onDragStart={() => handleDragStart(idx)}
                       onDragOver={e => handleDragOverItem(e, idx)}
                       onDrop={e => handleDropItem(e, idx)}
                       onDragEnd={handleDragEnd}
-                      className={`relative rounded-lg overflow-hidden bg-[#161616] border aspect-square group cursor-grab active:cursor-grabbing transition-all
+                      className={`relative rounded-lg overflow-hidden bg-[#161616] border aspect-square group cursor-pointer active:cursor-grabbing transition-all
                         ${dragOverIndex === idx ? "border-[#3776AB] ring-2 ring-[#3776AB]/40 scale-95" : "border-[#2a2a2a]"}
                         ${dragIndex === idx ? "opacity-30" : ""}`}
                     >
@@ -265,34 +266,24 @@ export default function Home() {
                         <X className="w-2.5 h-2.5" />
                       </button>
 
-                      {/* Bottom toolbar */}
-                      <div className="absolute bottom-1 left-1 right-1 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Bottom toolbar — move up/down (click image to edit) */}
+                      <div className="absolute bottom-1 left-1 right-1 flex justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={e => { e.stopPropagation(); setEditingId(img.id) }}
-                          className="flex-1 h-5 mr-0.5 rounded bg-black/80 hover:bg-[#3776AB]/80 flex items-center justify-center text-[9px] text-gray-300 hover:text-white transition-colors cursor-pointer gap-0.5"
-                          aria-label="编辑"
+                          onClick={e => { e.stopPropagation(); moveImage(idx, -1) }}
+                          disabled={idx === 0}
+                          className="w-5 h-5 rounded bg-black/80 hover:bg-[#3776AB]/80 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
+                          aria-label="上移"
                         >
-                          <Pencil className="w-2.5 h-2.5" />
-                          编辑
+                          <ArrowUp className="w-2.5 h-2.5" />
                         </button>
-                        <div className="flex gap-0.5">
-                          <button
-                            onClick={e => { e.stopPropagation(); moveImage(idx, -1) }}
-                            disabled={idx === 0}
-                            className="w-5 h-5 rounded bg-black/80 hover:bg-[#3776AB]/80 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
-                            aria-label="上移"
-                          >
-                            <ArrowUp className="w-2.5 h-2.5" />
-                          </button>
-                          <button
-                            onClick={e => { e.stopPropagation(); moveImage(idx, 1) }}
-                            disabled={idx === images.length - 1}
-                            className="w-5 h-5 rounded bg-black/80 hover:bg-[#3776AB]/80 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
-                            aria-label="下移"
-                          >
-                            <ArrowDown className="w-2.5 h-2.5" />
-                          </button>
-                        </div>
+                        <button
+                          onClick={e => { e.stopPropagation(); moveImage(idx, 1) }}
+                          disabled={idx === images.length - 1}
+                          className="w-5 h-5 rounded bg-black/80 hover:bg-[#3776AB]/80 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
+                          aria-label="下移"
+                        >
+                          <ArrowDown className="w-2.5 h-2.5" />
+                        </button>
                       </div>
                     </div>
                   ))}
