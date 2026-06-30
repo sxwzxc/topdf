@@ -9,6 +9,7 @@ import {
   Play, FolderTree, Route, Layers, FileImage,
 } from "lucide-react"
 import ImageEditor from "@/components/ImageEditor"
+import { compressImage, compressBlob, ImageTooLargeError } from "@/lib/imageCompressor"
 
 export default function Home() {
   // Image-to-PDF converter state
@@ -19,30 +20,62 @@ export default function Home() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [compressing, setCompressing] = useState(false)
+  const [compressingCount, setCompressingCount] = useState({ done: 0, total: 0 })
+  const [applyingEdit, setApplyingEdit] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [apiResults, setApiResults] = useState<Record<string, { data: string; status: number } | null>>({})
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
   const [expandedCode, setExpandedCode] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const addFiles = (fileList: FileList | null) => {
+  const addFiles = async (fileList: FileList | null) => {
     setConvertError(null)
     if (!fileList || fileList.length === 0) return
-    const newItems = Array.from(fileList)
-      .filter(f => f.type.startsWith("image/"))
-      .map(file => ({
-        id: `${file.name}-${file.size}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        file,
-        url: URL.createObjectURL(file),
-      }))
-    if (newItems.length === 0) {
+
+    const imageFiles = Array.from(fileList).filter(f => f.type.startsWith("image/"))
+    if (imageFiles.length === 0) {
       setConvertError("请只选择图片文件。")
       return
     }
-    setImages(prev => [...prev, ...newItems])
+
+    setCompressing(true)
+    setCompressingCount({ done: 0, total: imageFiles.length })
+
+    const newItems: { id: string; file: File; url: string }[] = []
+    const errors: string[] = []
+
+    for (let i = 0; i < imageFiles.length; i++) {
+      const f = imageFiles[i]
+      try {
+        const compressed = await compressImage(f)
+        newItems.push({
+          id: `${f.name}-${compressed.size}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          file: compressed,
+          url: URL.createObjectURL(compressed),
+        })
+      } catch (err) {
+        if (err instanceof ImageTooLargeError) {
+          errors.push(err.message)
+        } else {
+          errors.push(`"${f.name}" 压缩失败`)
+        }
+      }
+      setCompressingCount({ done: i + 1, total: imageFiles.length })
+    }
+
+    setCompressing(false)
+
+    if (errors.length > 0) {
+      setConvertError(errors.join("；"))
+    }
+    if (newItems.length > 0) {
+      setImages(prev => [...prev, ...newItems])
+    }
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (compressing) return
     addFiles(e.target.files)
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
@@ -50,6 +83,7 @@ export default function Home() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
+    if (compressing) return
     addFiles(e.dataTransfer.files)
   }
 
@@ -92,14 +126,21 @@ export default function Home() {
   }
   const handleDragEnd = () => { setDragIndex(null); setDragOverIndex(null) }
 
-  const applyEdit = (id: string, blob: Blob, fileName: string) => {
-    setImages(prev => {
-      const t = prev.find(i => i.id === id)
-      if (t) URL.revokeObjectURL(t.url)
-      const f = new File([blob], fileName, { type: blob.type })
-      return prev.map(i => i.id === id ? { ...i, file: f, url: URL.createObjectURL(blob) } : i)
-    })
-    setEditingId(null)
+  const applyEdit = async (id: string, blob: Blob, fileName: string) => {
+    setApplyingEdit(true)
+    try {
+      const compressed = await compressBlob(blob, fileName)
+      setImages(prev => {
+        const target = prev.find(i => i.id === id)
+        if (target) URL.revokeObjectURL(target.url)
+        return prev.map(i => i.id === id ? { ...i, file: compressed, url: URL.createObjectURL(compressed) } : i)
+      })
+      setEditingId(null)
+    } catch (err) {
+      setConvertError(err instanceof Error ? err.message : "编辑后的图片压缩失败")
+    } finally {
+      setApplyingEdit(false)
+    }
   }
 
   const clearAll = () => {
@@ -206,17 +247,25 @@ export default function Home() {
 
             {/* Drop zone */}
             <div
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
+              onClick={() => { if (!compressing) fileInputRef.current?.click() }}
+              onDragOver={e => { e.preventDefault(); if (!compressing) setIsDragging(true) }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              className={`dropzone flex flex-col items-center justify-center gap-2 py-10 px-4 rounded-xl cursor-pointer transition-all ${isDragging ? "dropzone-active" : ""}`}
+              className={`dropzone flex flex-col items-center justify-center gap-2 py-10 px-4 rounded-xl transition-all ${compressing ? "opacity-50 pointer-events-none" : "cursor-pointer"} ${isDragging && !compressing ? "dropzone-active" : ""}`}
             >
               <div className="w-11 h-11 rounded-full bg-[#3776AB]/15 flex items-center justify-center">
-                <Upload className="w-5 h-5 text-[#3776AB]" />
+                {compressing ? (
+                  <Loader2 className="w-5 h-5 text-[#3776AB] animate-spin" />
+                ) : (
+                  <Upload className="w-5 h-5 text-[#3776AB]" />
+                )}
               </div>
-              <p className="text-sm text-gray-300 font-medium">点击或拖拽图片到这里</p>
-              <p className="text-xs text-gray-500">支持 JPG · PNG · WEBP · GIF · BMP</p>
+              <p className="text-sm text-gray-300 font-medium">
+                {compressing
+                  ? `压缩中... (${compressingCount.done}/${compressingCount.total})`
+                  : "点击或拖拽图片到这里"}
+              </p>
+              <p className="text-xs text-gray-500">支持 JPG · PNG · WEBP · GIF · BMP · 单张最大 50MB</p>
             </div>
 
             {/* Thumbnails */}
@@ -226,7 +275,11 @@ export default function Home() {
                   <p className="text-xs text-gray-500">
                     点击编辑 · 拖拽排序
                   </p>
-                  <button onClick={clearAll} className="text-xs text-gray-500 hover:text-red-400 transition-colors cursor-pointer">
+                  <button
+                    onClick={clearAll}
+                    disabled={compressing}
+                    className="text-xs text-gray-500 hover:text-red-400 disabled:opacity-30 transition-colors cursor-pointer"
+                  >
                     清空
                   </button>
                 </div>
@@ -291,7 +344,8 @@ export default function Home() {
                   {/* Add more tile */}
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="aspect-square rounded-lg border border-dashed border-[#2a2a2a] hover:border-[#3776AB]/50 hover:bg-[#3776AB]/5 flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-[#3776AB] transition-colors cursor-pointer"
+                    disabled={compressing}
+                    className="aspect-square rounded-lg border border-dashed border-[#2a2a2a] hover:border-[#3776AB]/50 hover:bg-[#3776AB]/5 disabled:opacity-30 flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-[#3776AB] transition-colors cursor-pointer"
                     aria-label="添加更多图片"
                   >
                     <ImagePlus className="w-5 h-5" />
@@ -308,7 +362,7 @@ export default function Home() {
                   )}
                   <Button
                     onClick={handleConvert}
-                    disabled={converting}
+                    disabled={converting || compressing || applyingEdit}
                     className="w-full h-11 bg-[#3776AB] hover:bg-[#2d6290] text-white font-medium rounded-xl cursor-pointer transition-colors"
                   >
                     {converting ? (

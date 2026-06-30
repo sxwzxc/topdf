@@ -8,6 +8,11 @@ Supports two input modes:
   2. Raw image bytes in body (Content-Type: image/*)
      → converts a single image to PDF (backward compatible).
 
+Limits:
+  - Max image dimension: 4096px (auto-downscale)
+  - Max input body size: 50 MB
+  - Max decompression pixels: 200 million (Pillow safety threshold)
+
 GET returns usage info.
 """
 import base64
@@ -15,6 +20,24 @@ import cgi
 import io
 import json
 from http.server import BaseHTTPRequestHandler
+
+# 图片尺寸 / 大小限制
+MAX_DIMENSION = 4096          # 最长边最大像素数
+MAX_BODY_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+def _resize_if_needed(img):
+    """如果图片任意边长超过 MAX_DIMENSION，等比缩放到限制内。"""
+    w, h = img.size
+    longer = max(w, h)
+    if longer <= MAX_DIMENSION:
+        return img
+
+    scale = MAX_DIMENSION / longer
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+    # 使用高质量 LANCZOS 重采样
+    return img.resize((new_w, new_h), img.Resampling.LANCZOS)
 
 
 def _build_pdf(pages):
@@ -99,6 +122,18 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            # 请求体大小检查
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > MAX_BODY_SIZE:
+                size_mb = content_length / (1024 * 1024)
+                self._send_json(413, {
+                    "error": (
+                        "请求体过大 (%.1f MB)，上限为 50 MB。"
+                        "请减少图片数量或先压缩图片。" % size_mb
+                    )
+                })
+                return
+
             content_type = self.headers.get("Content-Type", "")
 
             if "multipart/form-data" in content_type:
@@ -107,7 +142,7 @@ class handler(BaseHTTPRequestHandler):
                 image_buffers = self._parse_raw_image()
 
             if not image_buffers:
-                self._send_json(400, {"error": "No valid image data received"})
+                self._send_json(400, {"error": "未接收到有效的图片数据"})
                 return
 
             pdf_bytes = self._images_to_pdf(image_buffers)
@@ -125,8 +160,12 @@ class handler(BaseHTTPRequestHandler):
             self.send_header("X-Powered-By", "Python Cloud Function")
             self.end_headers()
             self.wfile.write(b64_str.encode("ascii"))
+        except ValueError as e:
+            # 业务层错误（图片过大、格式不支持等）→ 400
+            self._send_json(400, {"error": str(e)})
         except Exception as e:
-            self._send_json(500, {"error": str(e)})
+            # 未预期的运行时错误 → 500
+            self._send_json(500, {"error": "服务器内部错误: %s" % str(e)})
 
     def _parse_raw_image(self):
         content_length = int(self.headers.get("Content-Length", 0))
@@ -175,22 +214,44 @@ class handler(BaseHTTPRequestHandler):
         """Convert images to a PDF by encoding each as JPEG and building the
         PDF structure manually. This avoids Pillow's built-in PDF saver, which
         produces corrupted image streams on some runtime environments."""
-        from PIL import Image
+        from PIL import Image, DecompressionBombError
+
+        # 提高解压炸弹阈值，避免大分辨率图片误报（默认 ~89M 像素）
+        Image.MAX_IMAGE_PIXELS = 200_000_000
 
         pages = []
-        for buf in image_buffers:
-            img = Image.open(io.BytesIO(buf))
-            if img.mode in ("RGBA", "LA"):
-                background = Image.new("RGB", img.size, (255, 255, 255))
-                background.paste(img, mask=img.split()[-1])
-                img = background
-            elif img.mode != "RGB":
-                img = img.convert("RGB")
+        for i, buf in enumerate(image_buffers):
+            try:
+                img = Image.open(io.BytesIO(buf))
+                # 自动缩放超大图片
+                img = _resize_if_needed(img)
 
-            jpeg_buf = io.BytesIO()
-            img.save(jpeg_buf, format="JPEG", quality=90)
-            pages.append((jpeg_buf.getvalue(), img.width, img.height))
-            img.close()
+                if img.mode in ("RGBA", "LA"):
+                    background = Image.new("RGB", img.size, (255, 255, 255))
+                    background.paste(img, mask=img.split()[-1])
+                    img = background
+                elif img.mode != "RGB":
+                    img = img.convert("RGB")
+
+                jpeg_buf = io.BytesIO()
+                img.save(jpeg_buf, format="JPEG", quality=90)
+                pages.append((jpeg_buf.getvalue(), img.width, img.height))
+                img.close()
+            except DecompressionBombError:
+                raise ValueError(
+                    "图片 #%d 分辨率过高，Pillow 安全策略阻止了解压。"
+                    "请使用更小尺寸的图片或在前端先压缩。" % (i + 1)
+                )
+            except MemoryError:
+                raise ValueError(
+                    "图片 #%d 过大导致内存不足。"
+                    "请使用更小尺寸的图片。" % (i + 1)
+                )
+            except OSError as e:
+                raise ValueError("图片 #%d 无法读取或已损坏: %s" % (i + 1, str(e)))
+
+        if not pages:
+            raise ValueError("没有有效的图片可转换为 PDF。")
 
         return _build_pdf(pages)
 
