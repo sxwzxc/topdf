@@ -214,7 +214,13 @@ class handler(BaseHTTPRequestHandler):
         """Convert images to a PDF by encoding each as JPEG and building the
         PDF structure manually. This avoids Pillow's built-in PDF saver, which
         produces corrupted image streams on some runtime environments."""
-        from PIL import Image, DecompressionBombError
+        from PIL import Image
+
+        # 兼容旧版 Pillow：DecompressionBombError 在高版本才可从 PIL 顶层导入
+        try:
+            from PIL.Image import DecompressionBombError
+        except ImportError:
+            DecompressionBombError = ValueError  # 旧版的 DecompressionBombError 基类
 
         # 提高解压炸弹阈值，避免大分辨率图片误报（默认 ~89M 像素）
         Image.MAX_IMAGE_PIXELS = 200_000_000
