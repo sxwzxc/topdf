@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Python + EdgeOne Pages",
-  description: "Deploy lightweight Python serverless functions on EdgeOne Pages without any web framework dependency. Pure Python, maximum performance.",
+  title: "Img → PDF",
+  description: "Convert and merge images into a single PDF directly in the browser. Supports crop, rotate, reorder, and merge multiple images.",
+  icons: {
+    icon: "/app-icon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -13,12 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en-US">
-      <head>
-        <link rel="icon" href="/python-favicon.svg" />
-      </head>
-      <body
-        className="antialiased"
-      >
+      <body className="antialiased">
         {children}
       </body>
     </html>

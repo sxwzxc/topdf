@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Background -->
+  <rect width="32" height="32" rx="6" fill="#3776AB"/>
+  <!-- Document outline -->
+  <path d="M7 5h12l6 6v16a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="none" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Fold corner -->
+  <path d="M19 5v6h6" fill="none" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Image icon inside document -->
+  <rect x="10" y="13" width="12" height="10" rx="1.5" fill="none" stroke="white" stroke-width="1.5"/>
+  <!-- Mountains/landscape in image -->
+  <path d="M10 19l3-3 2.5 2 3-2 3.5 3v2H10z" fill="white" opacity="0.7"/>
+  <!-- Sun dot -->
+  <circle cx="20.5" cy="15.5" r="1" fill="white"/>
+</svg>
