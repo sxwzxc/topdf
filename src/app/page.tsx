@@ -6,10 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Upload, Download, Loader2, X, ArrowUp, ArrowDown,
   ImagePlus, GripVertical, ChevronDown, ChevronUp,
-  Play, FolderTree, Route, Layers, FileImage,
+  Play, FolderTree, Route, Layers, FileImage, Monitor,
 } from "lucide-react"
 import ImageEditor from "@/components/ImageEditor"
 import { compressImage, compressBlob, ImageTooLargeError } from "@/lib/imageCompressor"
+import { buildAndDownloadPdf } from "@/lib/clientPdfBuilder"
 
 export default function Home() {
   // Image-to-PDF converter state
@@ -23,6 +24,7 @@ export default function Home() {
   const [compressing, setCompressing] = useState(false)
   const [compressingCount, setCompressingCount] = useState({ done: 0, total: 0 })
   const [applyingEdit, setApplyingEdit] = useState(false)
+  const [clientConverting, setClientConverting] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [apiResults, setApiResults] = useState<Record<string, { data: string; status: number } | null>>({})
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
@@ -180,6 +182,21 @@ export default function Home() {
       setConvertError(err instanceof Error ? err.message : "转换失败。")
     } finally {
       setConverting(false)
+    }
+  }
+
+  const handleClientConvert = async () => {
+    if (images.length === 0) return
+    setClientConverting(true)
+    setConvertError(null)
+    try {
+      const files = images.map(i => i.file)
+      const filename = images.length > 1 ? "merged.pdf" : "converted.pdf"
+      await buildAndDownloadPdf(files, filename)
+    } catch (err) {
+      setConvertError(err instanceof Error ? err.message : "客户端合成失败")
+    } finally {
+      setClientConverting(false)
     }
   }
 
@@ -362,13 +379,24 @@ export default function Home() {
                   )}
                   <Button
                     onClick={handleConvert}
-                    disabled={converting || compressing || applyingEdit}
+                    disabled={converting || compressing || applyingEdit || clientConverting}
                     className="w-full h-11 bg-[#3776AB] hover:bg-[#2d6290] text-white font-medium rounded-xl cursor-pointer transition-colors"
                   >
                     {converting ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" />转换中...</>
                     ) : (
                       <><Download className="w-4 h-4 mr-2" />{images.length > 1 ? "合并为 PDF" : "转为 PDF"}</>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleClientConvert}
+                    disabled={clientConverting || converting || compressing || applyingEdit}
+                    className="w-full h-10 bg-[#1e1e1e] hover:bg-[#2a2a2a] text-gray-300 font-medium rounded-xl border border-[#333] cursor-pointer transition-colors"
+                  >
+                    {clientConverting ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />合成中...</>
+                    ) : (
+                      <><Monitor className="w-4 h-4 mr-2" />客户端合成 PDF</>
                     )}
                   </Button>
                 </div>
