@@ -241,6 +241,17 @@ export default function Home() {
       <div className="gradient-orb gradient-orb-3" />
       <div className="dot-pattern" />
 
+      {/* ── 署名 (右上角固定) ── */}
+      <div className="fixed top-4 right-4 z-50 animate-signature-in select-none pointer-events-none">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full 
+          bg-white/60 backdrop-blur-md border border-slate-200/50 shadow-sm
+          text-[11px] font-medium text-slate-400 tracking-wide
+          hover:bg-white/80 hover:border-slate-300 hover:text-slate-500 hover:shadow transition-all duration-500">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-signature-dot" />
+          made by <span className="text-slate-500 font-semibold">sxw</span>
+        </span>
+      </div>
+
       {/* ── Header (毛玻璃) ── */}
       <header className="sticky top-0 z-20 glass-nav">
         <div className="max-w-3xl mx-auto px-5 h-16 flex items-center justify-between">
