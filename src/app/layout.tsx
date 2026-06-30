@@ -2,14 +2,11 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Img → PDF",
-  description: "Convert and merge images into a single PDF directly in the browser. Supports crop, rotate, reorder, and merge multiple images.",
+  title: "图片转 PDF",
+  description: "在浏览器中直接将图片转换为 PDF，支持裁剪、旋转、四点透视矫正、多图合并排序。全部本地处理，无需上传服务器。",
   icons: {
     icon: "/app-icon.svg",
   },
-  // Prevent browser auto-translation from mutating DOM text nodes before
-  // React hydration, which causes React error #418 (hydration mismatch).
-  other: { "google": "notranslate" },
 };
 
 export const viewport: Viewport = {
@@ -24,11 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en-US" translate="no" suppressHydrationWarning>
-      <head>
-        <meta name="google" content="notranslate" />
-        <meta httpEquiv="Content-Language" content="en-US" />
-      </head>
+    <html lang="zh-CN" suppressHydrationWarning>
       <body className="antialiased" suppressHydrationWarning>
         {children}
       </body>

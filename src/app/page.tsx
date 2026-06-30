@@ -36,7 +36,7 @@ export default function Home() {
         url: URL.createObjectURL(file),
       }))
     if (newItems.length === 0) {
-      setConvertError("Please select image files only.")
+      setConvertError("请只选择图片文件。")
       return
     }
     setImages(prev => [...prev, ...newItems])
@@ -117,7 +117,7 @@ export default function Home() {
       images.forEach((img, idx) => formData.append(`image-${idx}`, img.file, img.file.name))
       const res = await fetch("/api/img2pdf", { method: "POST", body: formData })
       if (!res.ok) {
-        let msg = `Conversion failed (HTTP ${res.status})`
+        let msg = `转换失败 (HTTP ${res.status})`
         try { const d = await res.json(); if (d?.error) msg = d.error } catch { /* not json */ }
         throw new Error(msg)
       }
@@ -131,7 +131,7 @@ export default function Home() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
-      setConvertError(err instanceof Error ? err.message : "Conversion failed.")
+      setConvertError(err instanceof Error ? err.message : "转换失败。")
     } finally {
       setConverting(false)
     }
@@ -146,11 +146,11 @@ export default function Home() {
   }
 
   const apiEndpoints = [
-    { path: "/hello", file: "cloud-functions/hello.py", desc: "Static route — file name maps directly to path" },
-    { path: "/api/posts", file: "cloud-functions/api/posts/index.py", desc: "index.py serves as the default handler for a directory" },
-    { path: "/api/users/u-42", file: "cloud-functions/api/users/[userId].py", desc: "[userId] captures a single dynamic segment" },
-    { path: "/api/users/u-42/posts/p-7", file: "cloud-functions/api/users/[userId]/posts/[postId].py", desc: "Nested dynamic params: [userId] and [postId]" },
-    { path: "/api/files/docs/guide/intro.md", file: "cloud-functions/api/files/[[path]].py", desc: "[[path]] catches all remaining path segments" },
+    { path: "/hello", file: "cloud-functions/hello.py", desc: "静态路由 — 文件名直接映射为路径" },
+    { path: "/api/posts", file: "cloud-functions/api/posts/index.py", desc: "index.py 作为目录的默认处理函数" },
+    { path: "/api/users/u-42", file: "cloud-functions/api/users/[userId].py", desc: "[userId] 捕获单个动态路径段" },
+    { path: "/api/users/u-42/posts/p-7", file: "cloud-functions/api/users/[userId]/posts/[postId].py", desc: "嵌套动态参数：[userId] 与 [postId]" },
+    { path: "/api/files/docs/guide/intro.md", file: "cloud-functions/api/files/[[path]].py", desc: "[[path]] 捕获剩余所有路径段" },
   ]
 
   return (
@@ -168,7 +168,7 @@ export default function Home() {
               <path d="M10 19l3-3 2.5 2 3-2 3.5 3v2H10z" fill="white" opacity="0.7"/>
               <circle cx="20.5" cy="15.5" r="1" fill="white"/>
             </svg>
-            <span className="font-semibold text-base tracking-tight">Img → PDF</span>
+            <span className="font-semibold text-base tracking-tight">图片转 PDF</span>
           </div>
           <a href="https://github.com/sxwzxc/topdf" target="_blank" rel="noopener noreferrer"
              className="text-gray-500 hover:text-white transition-colors p-1" aria-label="GitHub">
@@ -187,11 +187,11 @@ export default function Home() {
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm font-medium flex items-center gap-2 text-gray-400">
               <FileImage className="w-4 h-4 text-[#3776AB]" />
-              <span>Images → PDF</span>
+              <span>图片转 PDF</span>
               <span
                 className={`ml-auto text-xs bg-[#3776AB]/20 text-[#3776AB] px-2 py-0.5 rounded-full font-mono ${images.length > 1 ? "" : "hidden"}`}
               >
-                {images.length} pages
+                {images.length} 页
               </span>
             </CardTitle>
           </CardHeader>
@@ -210,8 +210,8 @@ export default function Home() {
               <div className="w-11 h-11 rounded-full bg-[#3776AB]/15 flex items-center justify-center">
                 <Upload className="w-5 h-5 text-[#3776AB]" />
               </div>
-              <p className="text-sm text-gray-300 font-medium">Click or drop images here</p>
-              <p className="text-xs text-gray-500">JPG · PNG · WEBP · GIF · BMP</p>
+              <p className="text-sm text-gray-300 font-medium">点击或拖拽图片到这里</p>
+              <p className="text-xs text-gray-500">支持 JPG · PNG · WEBP · GIF · BMP</p>
             </div>
 
             {/* Thumbnails */}
@@ -219,10 +219,10 @@ export default function Home() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-gray-500">
-                    Drag to reorder · hover for Edit
+                    拖拽排序 · 悬停编辑
                   </p>
                   <button onClick={clearAll} className="text-xs text-gray-500 hover:text-red-400 transition-colors cursor-pointer">
-                    Clear
+                    清空
                   </button>
                 </div>
 
@@ -240,7 +240,7 @@ export default function Home() {
                         ${dragIndex === idx ? "opacity-30" : ""}`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img.url} alt={`Page ${idx + 1}`}
+                      <img src={img.url} alt={`第 ${idx + 1} 页`}
                            className="w-full h-full object-cover pointer-events-none" />
 
                       {/* Page number */}
@@ -255,7 +255,7 @@ export default function Home() {
                       <button
                         onClick={e => { e.stopPropagation(); removeImage(img.id) }}
                         className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/80 hover:bg-red-500/80 flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
-                        aria-label="Remove"
+                        aria-label="删除"
                       >
                         <X className="w-2.5 h-2.5" />
                       </button>
@@ -265,17 +265,17 @@ export default function Home() {
                         <button
                           onClick={e => { e.stopPropagation(); setEditingId(img.id) }}
                           className="flex-1 h-5 mr-0.5 rounded bg-black/80 hover:bg-[#3776AB]/80 flex items-center justify-center text-[9px] text-gray-300 hover:text-white transition-colors cursor-pointer gap-0.5"
-                          aria-label="Edit"
+                          aria-label="编辑"
                         >
                           <Pencil className="w-2.5 h-2.5" />
-                          Edit
+                          编辑
                         </button>
                         <div className="flex gap-0.5">
                           <button
                             onClick={e => { e.stopPropagation(); moveImage(idx, -1) }}
                             disabled={idx === 0}
                             className="w-5 h-5 rounded bg-black/80 hover:bg-[#3776AB]/80 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
-                            aria-label="Move up"
+                            aria-label="上移"
                           >
                             <ArrowUp className="w-2.5 h-2.5" />
                           </button>
@@ -283,7 +283,7 @@ export default function Home() {
                             onClick={e => { e.stopPropagation(); moveImage(idx, 1) }}
                             disabled={idx === images.length - 1}
                             className="w-5 h-5 rounded bg-black/80 hover:bg-[#3776AB]/80 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center text-gray-300 hover:text-white transition-colors cursor-pointer"
-                            aria-label="Move down"
+                            aria-label="下移"
                           >
                             <ArrowDown className="w-2.5 h-2.5" />
                           </button>
@@ -296,10 +296,10 @@ export default function Home() {
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="aspect-square rounded-lg border border-dashed border-[#2a2a2a] hover:border-[#3776AB]/50 hover:bg-[#3776AB]/5 flex flex-col items-center justify-center gap-1 text-gray-600 hover:text-[#3776AB] transition-colors cursor-pointer"
-                    aria-label="Add more images"
+                    aria-label="添加更多图片"
                   >
                     <ImagePlus className="w-5 h-5" />
-                    <span className="text-[10px]">Add</span>
+                    <span className="text-[10px]">添加</span>
                   </button>
                 </div>
 
@@ -316,9 +316,9 @@ export default function Home() {
                     className="w-full h-11 bg-[#3776AB] hover:bg-[#2d6290] text-white font-medium rounded-xl cursor-pointer transition-colors"
                   >
                     {converting ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Converting...</>
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />转换中...</>
                     ) : (
-                      <><Download className="w-4 h-4 mr-2" />{images.length > 1 ? "Merge to PDF" : "Convert to PDF"}</>
+                      <><Download className="w-4 h-4 mr-2" />{images.length > 1 ? "合并为 PDF" : "转为 PDF"}</>
                     )}
                   </Button>
                 </div>
@@ -332,7 +332,7 @@ export default function Home() {
           onClick={() => setShowAdvanced(p => !p)}
           className="w-full flex items-center justify-between px-1 py-1 text-xs text-gray-600 hover:text-gray-400 transition-colors cursor-pointer"
         >
-          <span>API Documentation</span>
+          <span>API 文档</span>
           {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
         </button>
 
@@ -343,7 +343,7 @@ export default function Home() {
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-xs flex items-center gap-2 text-gray-500">
                   <FolderTree className="w-3.5 h-3.5 text-[#3776AB]" />
-                  File-Based Routing
+                  文件路由
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3">
@@ -380,7 +380,7 @@ export default function Home() {
                               className="h-7 px-2.5 bg-[#161616] hover:bg-[#1f1f1f] text-gray-400 hover:text-white text-[10px] rounded-lg cursor-pointer border border-[#2a2a2a]">
                         {loading ? <div className="w-2.5 h-2.5 border border-gray-500 border-t-transparent rounded-full animate-spin" />
                           : <Play className="w-2.5 h-2.5" />}
-                        <span className="ml-1">Call</span>
+                        <span className="ml-1">调用</span>
                       </Button>
                     </div>
                   </div>
@@ -392,7 +392,7 @@ export default function Home() {
                   )}
                   {res && (
                     <div className="border-t border-[#1a1a1a] px-3 py-2">
-                      <p className="text-[10px] text-gray-600 font-mono mb-1">Response {res.status > 0 ? `(${res.status})` : ""}</p>
+                      <p className="text-[10px] text-gray-600 font-mono mb-1">响应 {res.status > 0 ? `(${res.status})` : ""}</p>
                       <pre className="text-[10px] text-green-400 font-mono whitespace-pre-wrap break-all">{res.data}</pre>
                     </div>
                   )}
@@ -403,9 +403,9 @@ export default function Home() {
             {/* Features */}
             <div className="grid grid-cols-3 gap-2">
               {[
-                { icon: FolderTree, label: "File Routing", color: "#3776AB" },
-                { icon: Route, label: "Dynamic Routes", color: "#FFD43B" },
-                { icon: Layers, label: "Pure Python", color: "#FFD43B" },
+                { icon: FolderTree, label: "文件路由", color: "#3776AB" },
+                { icon: Route, label: "动态路由", color: "#FFD43B" },
+                { icon: Layers, label: "纯 Python", color: "#FFD43B" },
               ].map(({ icon: Icon, label, color }) => (
                 <div key={label} className="rounded-xl border border-[#1a1a1a] bg-[#0c0c0c] p-3 flex flex-col items-center gap-1.5 text-center">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${color}20` }}>
@@ -421,8 +421,8 @@ export default function Home() {
 
       {/* ── Footer ── */}
       <footer className="text-center py-6 text-[10px] text-gray-700">
-        Powered by <a href="https://pages.edgeone.ai" target="_blank" rel="noopener noreferrer"
-          className="hover:text-[#3776AB] transition-colors">EdgeOne Pages</a>
+        由 <a href="https://pages.edgeone.ai" target="_blank" rel="noopener noreferrer"
+          className="hover:text-[#3776AB] transition-colors">EdgeOne Pages</a> 提供动力
       </footer>
 
       {/* ── Image Editor Modal ── */}
