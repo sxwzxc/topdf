@@ -12,6 +12,7 @@ import {
   Crop as CropIcon,
   Scan,
   RefreshCw,
+  Palette,
 } from "lucide-react"
 
 interface ImageEditorProps {
@@ -21,7 +22,7 @@ interface ImageEditorProps {
   onCancel: () => void
 }
 
-type Mode = "crop" | "correct"
+type Mode = "crop" | "correct" | "enhance"
 
 const ASPECTS: { label: string; value: number | undefined }[] = [
   { label: "自由", value: undefined },
@@ -96,13 +97,16 @@ export default function ImageEditor({
         console.error("裁剪失败", err)
         setApplying(false)
       }
-    } else {
+    } else if (mode === "correct") {
       correctApplyRef.current?.()
+    } else if (mode === "enhance") {
+      enhanceApplyRef.current?.()
     }
   }
 
-  // correct mode apply handler (set by CorrectPanel)
+  // correct / enhance mode apply handler (set by respective panels)
   const correctApplyRef = useRef<(() => void) | null>(null)
+  const enhanceApplyRef = useRef<(() => void) | null>(null)
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -157,6 +161,17 @@ export default function ImageEditor({
           >
             <Scan className="w-3.5 h-3.5" />
             四点矫正
+          </button>
+          <button
+            onClick={() => setMode("enhance")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors cursor-pointer ${
+              mode === "enhance"
+                ? "text-[#3776AB] border-b-2 border-[#3776AB] bg-[#3776AB]/5"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            <Palette className="w-3.5 h-3.5" />
+            色彩修正
           </button>
         </div>
 
@@ -247,7 +262,7 @@ export default function ImageEditor({
               />
             </div>
           </>
-        ) : (
+        ) : mode === "correct" ? (
           <CorrectPanel
             imageSrc={imageSrc}
             fileName={fileName}
@@ -259,10 +274,379 @@ export default function ImageEditor({
             }}
             setApplying={setApplying}
           />
+        ) : (
+          <EnhancePanel
+            imageSrc={imageSrc}
+            fileName={fileName}
+            onApply={onApply}
+            onCancel={onCancel}
+            applying={applying}
+            registerApply={(fn) => {
+              enhanceApplyRef.current = fn
+            }}
+            setApplying={setApplying}
+          />
         )}
       </div>
     </div>
   )
+}
+
+/* ---------------- Enhance Panel (色彩修正 / 文档增强) ---------------- */
+
+interface EnhancePanelProps {
+  imageSrc: string
+  fileName: string
+  onApply: (blob: Blob, fileName: string) => void
+  onCancel: () => void
+  registerApply: (fn: () => void) => void
+  applying: boolean
+  setApplying: (v: boolean) => void
+}
+
+function EnhancePanel({
+  imageSrc,
+  fileName,
+  onApply,
+  onCancel,
+  registerApply,
+  applying,
+  setApplying,
+}: EnhancePanelProps) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [grayscale, setGrayscale] = useState(false)
+  const [contrast, setContrast] = useState(70)   // 0-100, 默认偏高
+  const [sharpen, setSharpen] = useState(40)      // 0-100
+  const [brightness, setBrightness] = useState(50) // 0-100, 50=不调整
+  const imgRef = useRef<HTMLImageElement>(null)
+
+  // 载入原图后自动生成预览
+  useEffect(() => {
+    let cancelled = false
+    const t = setTimeout(async () => {
+      try {
+        const img = await loadImage(imageSrc)
+        if (cancelled) return
+        const url = await enhanceDocument(img, {
+          grayscale,
+          contrast: contrast / 100,
+          sharpen: sharpen / 100,
+          brightness: brightness / 100,
+        })
+        if (!cancelled) setPreviewUrl(url)
+      } catch (err) {
+        console.error("增强预览失败", err)
+      }
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [imageSrc, grayscale, contrast, sharpen, brightness])
+
+  const doApply = async () => {
+    if (!previewUrl) return
+    setApplying(true)
+    try {
+      // 从预览 data URL 中提取 blob
+      const res = await fetch(previewUrl)
+      const blob = await res.blob()
+      const baseName = fileName.replace(/\.[^.]+$/, "")
+      onApply(blob, `${baseName}-enhanced.png`)
+    } catch (err) {
+      console.error("色彩修正失败", err)
+      setApplying(false)
+    }
+  }
+
+  useEffect(() => {
+    registerApply(doApply)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewUrl])
+
+  return (
+    <>
+      <div className="relative w-full h-[45vh] min-h-[280px] bg-slate-100 flex items-center justify-center overflow-hidden">
+        {/* 原图 / 增强后对比：顶部原图，底部增强 */}
+        <div className="flex flex-col w-full h-full">
+          <div className="flex-1 flex items-center justify-center bg-slate-100 border-b border-slate-200 relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              ref={imgRef}
+              src={imageSrc}
+              alt="原图"
+              className="max-h-full max-w-full object-contain opacity-80"
+              draggable={false}
+            />
+            <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-black/50 text-[10px] text-white font-medium">
+              原图
+            </span>
+          </div>
+          <div className="flex-1 flex items-center justify-center bg-white relative">
+            {previewUrl ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt="增强后"
+                  className="max-h-full max-w-full object-contain"
+                  draggable={false}
+                />
+                <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-[#3776AB]/80 text-[10px] text-white font-medium">
+                  增强后
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-slate-400">处理中...</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="px-4 py-3 space-y-3 border-t border-slate-200">
+        {/* 黑白模式 */}
+        <label className="flex items-center gap-3 cursor-pointer">
+          <span className="text-xs text-slate-500 w-12">黑白</span>
+          <button
+            onClick={() => setGrayscale(p => !p)}
+            className={`w-9 h-5 rounded-full transition-colors relative ${
+              grayscale ? "bg-[#3776AB]" : "bg-slate-300"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                grayscale ? "translate-x-[18px]" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+          <span className="text-xs text-slate-400">{grayscale ? "灰度" : "彩色"}</span>
+        </label>
+
+        {/* 对比度 */}
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500 w-12">对比度</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={contrast}
+            onChange={(e) => setContrast(Number(e.target.value))}
+            className="editor-range flex-1"
+          />
+          <span className="text-xs text-slate-600 font-mono w-8 text-right">{contrast}</span>
+        </div>
+
+        {/* 锐化 */}
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500 w-12">锐化</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={sharpen}
+            onChange={(e) => setSharpen(Number(e.target.value))}
+            className="editor-range flex-1"
+          />
+          <span className="text-xs text-slate-600 font-mono w-8 text-right">{sharpen}</span>
+        </div>
+
+        {/* 亮度偏移 */}
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500 w-12">亮度</span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={brightness}
+            onChange={(e) => setBrightness(Number(e.target.value))}
+            className="editor-range flex-1"
+          />
+          <span className="text-xs text-slate-600 font-mono w-8 text-right">{brightness}</span>
+        </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed">
+          自动白平衡 + 直方图拉伸模拟扫描效果。对比度越高背景越白文字越黑。
+        </p>
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onCancel}
+            className="px-4 h-9 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer text-sm"
+          >
+            取消
+          </button>
+          <Button
+            onClick={doApply}
+            disabled={applying || !previewUrl}
+            className="btn-primary rounded cursor-pointer"
+          >
+            {applying ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                处理中...
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4 mr-2" />
+                应用
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+/* ---------------- Image Enhancement Functions ---------------- */
+
+interface EnhanceOptions {
+  grayscale: boolean
+  contrast: number   // 0..1+
+  sharpen: number    // 0..1
+  brightness: number // 0..1, 0.5 = no change
+}
+
+/**
+ * 文档扫描风格增强：白平衡 → 直方图拉伸 → 锐化 → 可选灰度
+ * 返回 data URL (PNG)
+ */
+async function enhanceDocument(
+  img: HTMLImageElement,
+  opts: EnhanceOptions
+): Promise<string> {
+  const w = img.naturalWidth
+  const h = img.naturalHeight
+  const canvas = document.createElement("canvas")
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext("2d")!
+  ctx.drawImage(img, 0, 0)
+
+  const imageData = ctx.getImageData(0, 0, w, h)
+  const pixels = imageData.data
+
+  // 1. 白平衡：每通道独立直方图拉伸（2%~98% 分位 → 0~255）
+  autoWhiteBalance(pixels, w, h, opts.contrast)
+
+  // 2. 亮度偏移
+  if (opts.brightness !== 0.5) {
+    adjustBrightness(pixels, opts.brightness)
+  }
+
+  // 3. 锐化 (Unsharp Mask)
+  if (opts.sharpen > 0.01) {
+    unsharpMask(imageData, w, h, opts.sharpen)
+  }
+
+  // 4. 灰度转换
+  if (opts.grayscale) {
+    toGrayscale(pixels)
+  }
+
+  ctx.putImageData(imageData, 0, 0)
+  return canvas.toDataURL("image/png")
+}
+
+/** 每通道独立直方图拉伸：取各通道的 low~high 分位，映射到 0~255 */
+function autoWhiteBalance(pixels: Uint8ClampedArray, w: number, h: number, contrast: number) {
+  const total = w * h
+
+  // 构建每通道直方图
+  const histR = new Uint32Array(256)
+  const histG = new Uint32Array(256)
+  const histB = new Uint32Array(256)
+
+  for (let i = 0; i < total; i++) {
+    const off = i * 4
+    histR[pixels[off]]++
+    histG[pixels[off + 1]]++
+    histB[pixels[off + 2]]++
+  }
+
+  // 找 2% 和 98% 分位（受 contrast 参数调节）
+  const lowPct = Math.max(0, 0.02 - contrast * 0.03)  // 0% ~ 2%
+  const highPct = Math.min(1, 0.98 + contrast * 0.02)  // 98% ~ 100%
+
+  const lowR = percentileFromHist(histR, total, lowPct)
+  const highR = percentileFromHist(histR, total, highPct)
+  const lowG = percentileFromHist(histG, total, lowPct)
+  const highG = percentileFromHist(histG, total, highPct)
+  const lowB = percentileFromHist(histB, total, lowPct)
+  const highB = percentileFromHist(histB, total, highPct)
+
+  // 拉伸映射
+  for (let i = 0; i < total; i++) {
+    const off = i * 4
+    pixels[off] = stretch(pixels[off], lowR, highR)
+    pixels[off + 1] = stretch(pixels[off + 1], lowG, highG)
+    pixels[off + 2] = stretch(pixels[off + 2], lowB, highB)
+  }
+}
+
+/** 亮度调整：>0.5 提亮，<0.5 压暗 */
+function adjustBrightness(pixels: Uint8ClampedArray, level: number) {
+  // level 0..1, 0.5 = no change
+  const factor = 1 + (level - 0.5) * 0.8  // ±40 % 范围
+  for (let i = 0; i < pixels.length; i += 4) {
+    for (let c = 0; c < 3; c++) {
+      const v = pixels[i + c] * factor
+      pixels[i + c] = clamp(v, 0, 255)
+    }
+  }
+}
+
+/** Unsharp Mask 锐化 */
+function unsharpMask(imageData: ImageData, w: number, h: number, amount: number) {
+  const src = new Uint8Array(imageData.data)
+  const strength = amount * 2.5  // 0..1 → 0..2.5
+
+  // 3×3 高斯模糊核近似
+  const k = [1, 2, 1, 2, 4, 2, 1, 2, 1]
+  const kSum = 16
+
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = (y * w + x) * 4
+      for (let c = 0; c < 3; c++) {
+        let blur = 0
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const ni = ((y + dy) * w + (x + dx)) * 4 + c
+            const ki = (dy + 1) * 3 + (dx + 1)
+            blur += src[ni] * k[ki]
+          }
+        }
+        blur /= kSum
+        const original = src[idx + c]
+        // unsharp: sharp = original + (original - blur) * strength
+        imageData.data[idx + c] = clamp(original + (original - blur) * strength, 0, 255)
+      }
+    }
+  }
+}
+
+/** 转为灰度（亮度加权） */
+function toGrayscale(pixels: Uint8ClampedArray) {
+  for (let i = 0; i < pixels.length; i += 4) {
+    const gray = 0.299 * pixels[i] + 0.587 * pixels[i + 1] + 0.114 * pixels[i + 2]
+    pixels[i] = pixels[i + 1] = pixels[i + 2] = Math.round(gray)
+  }
+}
+
+function percentileFromHist(hist: Uint32Array, total: number, pct: number): number {
+  const target = pct * total
+  let cum = 0
+  for (let i = 0; i < 256; i++) {
+    cum += hist[i]
+    if (cum >= target) return i
+  }
+  return 255
+}
+
+function stretch(v: number, low: number, high: number): number {
+  if (high <= low) return v
+  return clamp(Math.round(((v - low) / (high - low)) * 255), 0, 255)
 }
 
 /* ---------------- Correct Panel (四点透视矫正) ---------------- */
@@ -598,8 +982,11 @@ async function getCroppedBlob(
 }
 
 /**
- * 四点透视矫正：把源四边形 (TL, TR, BR, BL) 变换为正面矩形。
- * 使用双三角形仿射近似法（每个三角形用 canvas 仿射变换 + clip 绘制）。
+ * 四点透视矫正：通过 Homography / DLT 求解 3×3 透视矩阵，
+ * 逐像素反向映射 + 双线性插值，输出正面矩形。
+ *
+ * 替代原先的双三角形仿射近似 —— 仿射无法表达透视消失点，
+ * 导致矫正结果严重失真。
  */
 async function warpQuadrilateral(
   imageSrc: string,
@@ -607,31 +994,87 @@ async function warpQuadrilateral(
 ): Promise<Blob> {
   const image = await loadImage(imageSrc)
   const [TL, TR, BR, BL] = srcPts
-  const topLen = dist(TL, TR)
-  const bottomLen = dist(BR, BL)
-  const leftLen = dist(TL, BL)
-  const rightLen = dist(TR, BR)
-  const outW = Math.max(1, Math.round((topLen + bottomLen) / 2))
-  const outH = Math.max(1, Math.round((leftLen + rightLen) / 2))
 
+  // 输出矩形尺寸：取对边平均长度
+  const outW = Math.max(1, Math.round((dist(TL, TR) + dist(BL, BR)) / 2))
+  const outH = Math.max(1, Math.round((dist(TL, BL) + dist(TR, BR)) / 2))
+
+  // 目标：把源四点映射到目标矩形的四角
+  const dst: [Pt, Pt, Pt, Pt] = [
+    { x: 0, y: 0 },         // TL → (0, 0)
+    { x: outW, y: 0 },      // TR → (W, 0)
+    { x: outW, y: outH },   // BR → (W, H)
+    { x: 0, y: outH },      // BL → (0, H)
+  ]
+
+  const H = computeHomography(srcPts, dst)       // src → dst 的 3×3 矩阵
+  const Hinv = invertHomography(H)                // dst → src 的逆矩阵（反向映射用）
+
+  // 在屏幕外 canvas 上绘制原图，便于逐像素读取
+  const srcCanvas = document.createElement("canvas")
+  srcCanvas.width = image.naturalWidth
+  srcCanvas.height = image.naturalHeight
+  const srcCtx = srcCanvas.getContext("2d")!
+  srcCtx.drawImage(image, 0, 0)
+  const srcData = srcCtx.getImageData(0, 0, srcCanvas.width, srcCanvas.height)
+
+  // 输出 canvas
   const out = document.createElement("canvas")
   out.width = outW
   out.height = outH
-  const ctx = out.getContext("2d")
-  if (!ctx) throw new Error("Canvas 2D context unavailable")
-  ctx.fillStyle = "#ffffff"
-  ctx.fillRect(0, 0, outW, outH)
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = "high"
+  const outCtx = out.getContext("2d")!
+  const outData = outCtx.createImageData(outW, outH)
 
-  const dstTL: Pt = { x: 0, y: 0 }
-  const dstTR: Pt = { x: outW, y: 0 }
-  const dstBR: Pt = { x: outW, y: outH }
-  const dstBL: Pt = { x: 0, y: outH }
+  const sw = srcCanvas.width
+  const sh = srcCanvas.height
+  const srcPixels = srcData.data
+  const dstPixels = outData.data
 
-  // 两个三角形覆盖矩形
-  warpTriangle(ctx, image, [TL, TR, BR], [dstTL, dstTR, dstBR])
-  warpTriangle(ctx, image, [TL, BR, BL], [dstTL, dstBR, dstBL])
+  // 逐像素反向映射
+  for (let v = 0; v < outH; v++) {
+    for (let u = 0; u < outW; u++) {
+      // 齐次坐标 [u, v, 1] 经 Hinv 映射回源图坐标
+      const w = Hinv[6] * u + Hinv[7] * v + Hinv[8]
+      const sx = (Hinv[0] * u + Hinv[1] * v + Hinv[2]) / w
+      const sy = (Hinv[3] * u + Hinv[4] * v + Hinv[5]) / w
+
+      const di = (v * outW + u) * 4
+
+      // 边界检查
+      if (sx < 0 || sx >= sw - 1 || sy < 0 || sy >= sh - 1) {
+        // 超出源图范围 → 白色
+        dstPixels[di] = 255
+        dstPixels[di + 1] = 255
+        dstPixels[di + 2] = 255
+        dstPixels[di + 3] = 255
+        continue
+      }
+
+      // 双线性插值
+      const fx = Math.floor(sx)
+      const fy = Math.floor(sy)
+      const dx = sx - fx
+      const dy = sy - fy
+
+      const i00 = (fy * sw + fx) * 4
+      const i10 = (fy * sw + (fx + 1)) * 4
+      const i01 = ((fy + 1) * sw + fx) * 4
+      const i11 = ((fy + 1) * sw + (fx + 1)) * 4
+
+      for (let c = 0; c < 3; c++) {
+        const v00 = srcPixels[i00 + c]
+        const v10 = srcPixels[i10 + c]
+        const v01 = srcPixels[i01 + c]
+        const v11 = srcPixels[i11 + c]
+        const top = v00 + (v10 - v00) * dx
+        const bot = v01 + (v11 - v01) * dx
+        dstPixels[di + c] = Math.round(top + (bot - top) * dy)
+      }
+      dstPixels[di + 3] = 255
+    }
+  }
+
+  outCtx.putImageData(outData, 0, 0)
 
   return new Promise<Blob>((resolve, reject) => {
     out.toBlob(
@@ -641,51 +1084,144 @@ async function warpQuadrilateral(
   })
 }
 
+/* ---------------- Homography helpers ---------------- */
+
 /**
- * 在 ctx 上绘制一个三角形区域：将 src 三角形仿射映射到 dst 三角形。
- * setTransform(a,b,c,d,e,f): X = a*x + c*y + e, Y = b*x + d*y + f
+ * DLT（直接线性变换）求解 4 对点的透视变换矩阵 H（3×3）。
+ * H 将 src → dst（即 dst ~ H × src）。
+ * 返回 9 个元素的列主序数组 [h11,h21,h31, h12,h22,h32, h13,h23,h33]。
  */
-function warpTriangle(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  src: [Pt, Pt, Pt],
-  dst: [Pt, Pt, Pt]
-) {
-  const m = computeAffine(src, dst)
-  ctx.save()
-  ctx.beginPath()
-  ctx.moveTo(dst[0].x, dst[0].y)
-  ctx.lineTo(dst[1].x, dst[1].y)
-  ctx.lineTo(dst[2].x, dst[2].y)
-  ctx.closePath()
-  ctx.clip()
-  // setTransform 直接替换当前矩阵（非累积）
-  ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5])
-  ctx.drawImage(img, 0, 0)
-  ctx.restore()
+function computeHomography(
+  src: [Pt, Pt, Pt, Pt],
+  dst: [Pt, Pt, Pt, Pt]
+): number[] {
+  // 构建 8×9 矩阵 A，每对点提供两行方程
+  const A: number[] = []
+  for (let i = 0; i < 4; i++) {
+    const x = src[i].x
+    const y = src[i].y
+    const u = dst[i].x
+    const v = dst[i].y
+    // 行 2i   : [-x, -y, -1, 0, 0, 0, x*u, y*u, u]
+    A.push(-x, -y, -1, 0, 0, 0, x * u, y * u, u)
+    // 行 2i+1 : [0, 0, 0, -x, -y, -1, x*v, y*v, v]
+    A.push(0, 0, 0, -x, -y, -1, x * v, y * v, v)
+  }
+
+  // SVD 求解 A·h = 0 的最小二乘解（等于 A^T·A 的最小特征值对应特征向量）
+  // 用幂迭代法求 9×9 矩阵 A^T·A 的最小特征向量
+  const h = solveNullspace(A, 9)
+  return h
 }
 
 /**
- * 计算从 src 三点到 dst 三点的仿射变换，返回 setTransform 参数 [a,b,c,d,e,f]
+ * 矩阵求逆：计算 H 的逆矩阵，用于反向映射（dst → src）。
  */
-function computeAffine(
-  src: [Pt, Pt, Pt],
-  dst: [Pt, Pt, Pt]
-): [number, number, number, number, number, number] {
-  const [s0, s1, s2] = src
-  const [d0, d1, d2] = dst
-  const denom =
-    (s0.x - s2.x) * (s1.y - s2.y) - (s1.x - s2.x) * (s0.y - s2.y)
-  if (Math.abs(denom) < 1e-10) return [1, 0, 0, 1, 0, 0]
-  const a =
-    ((d0.x - d2.x) * (s1.y - s2.y) - (d1.x - d2.x) * (s0.y - s2.y)) / denom
-  const c =
-    ((d1.x - d2.x) * (s0.x - s2.x) - (d0.x - d2.x) * (s1.x - s2.x)) / denom
-  const e = d0.x - a * s0.x - c * s0.y
-  const b =
-    ((d0.y - d2.y) * (s1.y - s2.y) - (d1.y - d2.y) * (s0.y - s2.y)) / denom
-  const d =
-    ((d1.y - d2.y) * (s0.x - s2.x) - (d0.y - d2.y) * (s1.x - s2.x)) / denom
-  const f = d0.y - b * s0.x - d * s0.y
-  return [a, b, c, d, e, f]
+function invertHomography(H: number[]): number[] {
+  // 3x3 矩阵求逆公式
+  const det =
+    H[0] * (H[4] * H[8] - H[5] * H[7]) -
+    H[1] * (H[3] * H[8] - H[5] * H[6]) +
+    H[2] * (H[3] * H[7] - H[4] * H[6])
+
+  if (Math.abs(det) < 1e-15) return [1, 0, 0, 0, 1, 0, 0, 0, 1] // 退化为单位矩阵
+
+  const invDet = 1 / det
+  return [
+    (H[4] * H[8] - H[5] * H[7]) * invDet,
+    (H[2] * H[7] - H[1] * H[8]) * invDet,
+    (H[1] * H[5] - H[2] * H[4]) * invDet,
+    (H[5] * H[6] - H[3] * H[8]) * invDet,
+    (H[0] * H[8] - H[2] * H[6]) * invDet,
+    (H[2] * H[3] - H[0] * H[5]) * invDet,
+    (H[3] * H[7] - H[4] * H[6]) * invDet,
+    (H[1] * H[6] - H[0] * H[7]) * invDet,
+    (H[0] * H[4] - H[1] * H[3]) * invDet,
+  ]
+}
+
+/**
+ * 幂迭代法求解 A^T·A 最小特征值对应的特征向量。
+ * A 以行主序存储，rows = 8, cols = 9。
+ */
+function solveNullspace(A: number[], n: number): number[] {
+  // 构造 B = A^T·A
+  const B = new Array(n * n).fill(0)
+  const rows = 8
+  for (let i = 0; i < rows; i++) {
+    const ai = i * n
+    for (let p = 0; p < n; p++) {
+      for (let q = 0; q < n; q++) {
+        B[p * n + q] += A[ai + p] * A[ai + q]
+      }
+    }
+  }
+
+  // 幂迭代找最大特征值
+  let v = new Array(n).fill(0).map((_, i) => i === n - 1 ? 1 : Math.random() * 0.01)
+  for (let iter = 0; iter < 30; iter++) {
+    // v = B · v
+    const next = new Array(n).fill(0)
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        next[i] += B[i * n + j] * v[j]
+      }
+    }
+    // 归一化
+    let norm = 0
+    for (let i = 0; i < n; i++) norm += next[i] * next[i]
+    norm = Math.sqrt(norm)
+    if (norm < 1e-15) break
+    for (let i = 0; i < n; i++) next[i] /= norm
+    v = next
+  }
+
+  // 最大特征向量已得到。对于最小特征值，我们对 B 做平移后再次迭代
+  // B' = B - λ_max·I，则 B' 的最小特征值对应 λ_min - λ_max
+  // 更简单：直接对 B 的逆做幂迭代。但这里用交替投影法。
+  // 实际上，用 SVD via Jacobi 或直接调 numeric 库更稳妥。
+  // 简化方案：对 B 平移后重新幂迭代找最小特征向量
+  const lambdaMax = dot(v, matVecMul(B, n, v))
+  // B_shifted = B - lambdaMax * I
+  const Bs = B.slice()
+  for (let i = 0; i < n; i++) Bs[i * n + i] -= lambdaMax
+
+  // 用原 v 的值（非零）初始化，做幂迭代找 Bs 的最大特征向量模长最大（对应 λ ≈ lambdaMax - lambdaMin 的绝对值最大）
+  // Bs 的所有特征值 ≤ 0，所以绝对值最大的 = 最负的 = λ_min - λ_max
+  // 带符号：选一个与 v 正交的初始向量
+  let w = new Array(n).fill(0).map(() => Math.random() - 0.5)
+  // 正交化（去除 v 分量）
+  const vDotW = dot(w, v)
+  for (let i = 0; i < n; i++) w[i] -= vDotW * v[i]
+  const normW = Math.sqrt(dot(w, w))
+  for (let i = 0; i < n; i++) w[i] /= normW
+
+  for (let iter = 0; iter < 40; iter++) {
+    const next = matVecMul(Bs, n, w)
+    // 再次正交化（去 v 分量）
+    const proj = dot(next, v)
+    for (let i = 0; i < n; i++) next[i] -= proj * v[i]
+    const nrm = Math.sqrt(dot(next, next))
+    if (nrm < 1e-15) break
+    for (let i = 0; i < n; i++) next[i] /= nrm
+    w = next
+  }
+
+  return w
+}
+
+function matVecMul(M: number[], n: number, v: number[]): number[] {
+  const r = new Array(n).fill(0)
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      r[i] += M[i * n + j] * v[j]
+    }
+  }
+  return r
+}
+
+function dot(a: number[], b: number[]): number {
+  let s = 0
+  for (let i = 0; i < a.length; i++) s += a[i] * b[i]
+  return s
 }
