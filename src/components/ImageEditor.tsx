@@ -733,7 +733,7 @@ function CorrectPanel({
         x: p.x * imgSize.w,
         y: p.y * imgSize.h,
       })) as [Pt, Pt, Pt, Pt]
-      const blob = await warpQuadrilateral(imageSrc, srcPts, imgSize)
+      const blob = await warpQuadrilateral(imageSrc, srcPts)
       const baseName = fileName.replace(/\.[^.]+$/, "")
       onApply(blob, `${baseName}-corrected.png`)
     } catch (err) {
@@ -997,8 +997,7 @@ async function getCroppedBlob(
  */
 async function warpQuadrilateral(
   imageSrc: string,
-  srcPts: [Pt, Pt, Pt, Pt],
-  _imgSize: { w: number; h: number }
+  srcPts: [Pt, Pt, Pt, Pt]
 ): Promise<Blob> {
   const image = await loadImage(imageSrc)
   const [TL, TR, BR, BL] = srcPts

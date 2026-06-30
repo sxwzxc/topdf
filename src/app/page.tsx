@@ -11,6 +11,7 @@ import {
 import ImageEditor from "@/components/ImageEditor"
 import { compressImage, compressBlob, ImageTooLargeError } from "@/lib/imageCompressor"
 import { buildAndDownloadPdf } from "@/lib/clientPdfBuilder"
+import { enhanceImageFile } from "@/lib/imageEnhancer"
 
 export default function Home() {
   const [images, setImages] = useState<{ id: string; file: File; url: string }[]>([])
@@ -24,6 +25,7 @@ export default function Home() {
   const [compressingCount, setCompressingCount] = useState({ done: 0, total: 0 })
   const [applyingEdit, setApplyingEdit] = useState(false)
   const [clientConverting, setClientConverting] = useState(false)
+  const [enhanceColors, setEnhanceColors] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [apiResults, setApiResults] = useState<Record<string, { data: string; status: number } | null>>({})
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
@@ -155,8 +157,18 @@ export default function Home() {
     setConverting(true)
     setConvertError(null)
     try {
+      // 色彩优化
+      let files = images.map(i => i.file)
+      if (enhanceColors) {
+        const enhanced: File[] = []
+        for (const f of files) {
+          enhanced.push(await enhanceImageFile(f))
+        }
+        files = enhanced
+      }
+
       const formData = new FormData()
-      images.forEach((img, idx) => formData.append(`image-${idx}`, img.file, img.file.name))
+      files.forEach((f, idx) => formData.append(`image-${idx}`, f, f.name))
       const res = await fetch("/api/img2pdf", { method: "POST", body: formData })
       if (!res.ok) {
         let msg = `转换失败 (HTTP ${res.status})`
@@ -188,7 +200,14 @@ export default function Home() {
     setClientConverting(true)
     setConvertError(null)
     try {
-      const files = images.map(i => i.file)
+      let files = images.map(i => i.file)
+      if (enhanceColors) {
+        const enhanced: File[] = []
+        for (const f of files) {
+          enhanced.push(await enhanceImageFile(f))
+        }
+        files = enhanced
+      }
       const filename = images.length > 1 ? "merged.pdf" : "converted.pdf"
       await buildAndDownloadPdf(files, filename)
     } catch (err) {
@@ -402,6 +421,28 @@ export default function Home() {
                       {convertError}
                     </div>
                   )}
+                  {/* 色彩优化开关 */}
+                  <label className="flex items-center gap-3 px-1 cursor-pointer select-none group">
+                    <div className="relative">
+                      <input
+                        type="checkbox"
+                        checked={enhanceColors}
+                        onChange={(e) => setEnhanceColors(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div className={`w-10 h-6 rounded-full transition-colors duration-200 flex items-center px-0.5 ${
+                        enhanceColors ? "bg-blue-500" : "bg-slate-300"
+                      }`}>
+                        <div className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                          enhanceColors ? "translate-x-4" : "translate-x-0"
+                        }`} />
+                      </div>
+                    </div>
+                    <span className="text-sm text-slate-500 group-hover:text-slate-700 transition-colors flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      优化图片色彩
+                    </span>
+                  </label>
                   <Button
                     onClick={handleConvert}
                     disabled={converting || compressing || applyingEdit || clientConverting}
