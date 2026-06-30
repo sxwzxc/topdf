@@ -16,6 +16,70 @@ import json
 from http.server import BaseHTTPRequestHandler
 
 
+def _build_pdf(pages):
+    """Build a minimal multi-page PDF with one JPEG image per page.
+
+    pages: list of (jpeg_bytes, width_px, height_px)
+    """
+    objects = []
+
+    # Object 1: Catalog
+    objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+
+    # Object 2: Pages root
+    page_count = len(pages)
+    # Each page occupies 3 object slots: page, content stream, image xobject
+    # Page object numbers start at 3: 3,6,9,...
+    kids = ["%d 0 R" % (3 + i * 3) for i in range(page_count)]
+    objects.append(
+        ("<< /Type /Pages /Kids [%s] /Count %d >>" % (" ".join(kids), page_count)).encode()
+    )
+
+    for jpeg, w, h in pages:
+        # Page object — references the content stream and image xobject
+        base = len(objects) + 1  # this page's object number
+        objects.append(
+            ("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] "
+             "/Contents %d 0 R "
+             "/Resources << /XObject << /Im0 %d 0 R >> >> >>" % (w, h, base + 1, base + 2)).encode()
+        )
+        # Content stream: draw image filling the page
+        content = ("q\n%d 0 0 %d 0 0 cm\n/Im0 Do\nQ" % (w, h)).encode()
+        objects.append(
+            ("<< /Length %d >>" % len(content)).encode()
+            + b"\nstream\n" + content + b"\nendstream"
+        )
+        # Image XObject (JPEG / DCTDecode)
+        objects.append(
+            ("<< /Type /XObject /Subtype /Image /Width %d /Height %d "
+             "/ColorSpace /DeviceRGB /BitsPerComponent 8 "
+             "/Filter /DCTDecode /Length %d >>" % (w, h, len(jpeg))).encode()
+            + b"\nstream\n" + jpeg + b"\nendstream"
+        )
+
+    # Assemble PDF
+    pdf = b"%PDF-1.4\n"
+    offsets = []
+    for i, obj in enumerate(objects):
+        offsets.append(len(pdf))
+        pdf += ("%d 0 obj\n" % (i + 1)).encode() + obj + b"\nendobj\n"
+
+    xref_offset = len(pdf)
+    obj_total = len(objects) + 1
+    pdf += b"xref\n"
+    pdf += ("0 %d\n" % obj_total).encode()
+    pdf += b"0000000000 65535 f \n"
+    for offset in offsets:
+        pdf += ("%010d 00000 n \n" % offset).encode()
+
+    pdf += b"trailer\n"
+    pdf += ("<< /Size %d /Root 1 0 R >>\n" % obj_total).encode()
+    pdf += b"startxref\n"
+    pdf += ("%d\n" % xref_offset).encode()
+    pdf += b"%%EOF"
+    return pdf
+
+
 class handler(BaseHTTPRequestHandler):
     """Convert one or more uploaded images to PDF using Pillow."""
 
@@ -103,39 +167,27 @@ class handler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _images_to_pdf(image_buffers):
+        """Convert images to a PDF by encoding each as JPEG and building the
+        PDF structure manually. This avoids Pillow's built-in PDF saver, which
+        produces corrupted image streams on some runtime environments."""
         from PIL import Image
 
-        pil_images = []
-        try:
-            for buf in image_buffers:
-                img = Image.open(io.BytesIO(buf))
-                if img.mode == "RGB":
-                    pass
-                elif img.mode in ("RGBA", "LA"):
-                    background = Image.new("RGB", img.size, (255, 255, 255))
-                    background.paste(img, mask=img.split()[-1])
-                    img = background
-                else:
-                    img = img.convert("RGB")
-                pil_images.append(img)
+        pages = []
+        for buf in image_buffers:
+            img = Image.open(io.BytesIO(buf))
+            if img.mode in ("RGBA", "LA"):
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[-1])
+                img = background
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
 
-            pdf_buffer = io.BytesIO()
-            first = pil_images[0]
-            rest = pil_images[1:] if len(pil_images) > 1 else []
-            first.save(
-                pdf_buffer,
-                format="PDF",
-                resolution=100.0,
-                save_all=True,
-                append_images=rest,
-            )
-            return pdf_buffer.getvalue()
-        finally:
-            for img in pil_images:
-                try:
-                    img.close()
-                except Exception:
-                    pass
+            jpeg_buf = io.BytesIO()
+            img.save(jpeg_buf, format="JPEG", quality=90)
+            pages.append((jpeg_buf.getvalue(), img.width, img.height))
+            img.close()
+
+        return _build_pdf(pages)
 
     def _send_json(self, status, data):
         self.send_response(status)
